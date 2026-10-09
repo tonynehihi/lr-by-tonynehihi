@@ -177,7 +177,7 @@ fn fmt_seq(vals: &[f32; 3]) -> String {
 /// segment alone links the gain map).
 fn primary_xmp() -> String {
     "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
-     <x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"LightCraft\">\n\
+     <x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Adobe XMP Core 7.0-c000 1.000000, 0000/00/00-00:00:00        \">\n\
      \x20<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
      \x20 <rdf:Description rdf:about=\"\"\n\
      \x20  xmlns:hdrgm=\"http://ns.adobe.com/hdr-gain-map/1.0/\"\n\
@@ -195,7 +195,7 @@ fn secondary_xmp(p: &GainMapParams) -> String {
     let cap_max = p.max_log2[0].max(p.max_log2[1]).max(p.max_log2[2]).max(0.0);
     format!(
         "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
-         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"LightCraft\">\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Adobe XMP Core 7.0-c000 1.000000, 0000/00/00-00:00:00        \">\n\
          \x20<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
          \x20 <rdf:Description rdf:about=\"\"\n\
          \x20  xmlns:hdrgm=\"http://ns.adobe.com/hdr-gain-map/1.0/\"\n\
@@ -247,6 +247,68 @@ fn iso_segment() -> Vec<u8> {
     seg.extend_from_slice(&len.to_be_bytes());
     seg.extend_from_slice(SIG);
     seg.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+    seg
+}
+
+/// Encode a float as a signed fraction with power-of-two denominator (2^30),
+/// per ISO 21496-1 (fractions use power-of-two denominators).
+fn frac_s(value: f32) -> (i32, u32) {
+    const DENOM: u32 = 1 << 30;
+    let n = (value as f64 * DENOM as f64).round() as i64;
+    (n.clamp(i32::MIN as i64, i32::MAX as i64) as i32, DENOM)
+}
+
+/// Encode a float as an unsigned fraction with power-of-two denominator (2^30).
+fn frac_u(value: f32) -> (u32, u32) {
+    const DENOM: u32 = 1 << 30;
+    let n = (value as f64 * DENOM as f64).round() as i64;
+    (n.clamp(0, u32::MAX as i64) as u32, DENOM)
+}
+
+/// APP2 ISO 21496-1 segment with FULL gain map metadata for the gain map image.
+/// Layout (big-endian), matching Adobe Lightroom:
+/// URN + min_version(2B) + writer_version(2B) + flags(1B) + baseHdrHeadroom(8B) +
+/// alternateHdrHeadroom(8B) + per-channel[3] { min(8B), max(8B), gamma(8B),
+/// baseOffset(8B), alternateOffset(8B) }.
+/// Flags 0xC0 = 3-channel Adobe-style (matches Lightroom's files).
+fn iso_gainmap_segment(p: &GainMapParams) -> Vec<u8> {
+    const SIG: &[u8] = b"urn:iso:std:iso:ts:21496:-1\x00";
+    let mut meta = Vec::with_capacity(137);
+    meta.push(0xC0); // 3-channel
+    // baseHdrHeadroom: 0/1
+    meta.extend_from_slice(&0u32.to_be_bytes());
+    meta.extend_from_slice(&1u32.to_be_bytes());
+    // alternateHdrHeadroom: max of max_log2
+    let cap_max = p.max_log2[0].max(p.max_log2[1]).max(p.max_log2[2]).max(0.0);
+    let (cn, cd) = frac_u(cap_max);
+    meta.extend_from_slice(&cn.to_be_bytes());
+    meta.extend_from_slice(&cd.to_be_bytes());
+    // Per-channel metadata
+    for c in 0..3 {
+        let (n, d) = frac_s(p.min_log2[c]);
+        meta.extend_from_slice(&n.to_be_bytes());
+        meta.extend_from_slice(&d.to_be_bytes());
+        let (n, d) = frac_s(p.max_log2[c]);
+        meta.extend_from_slice(&n.to_be_bytes());
+        meta.extend_from_slice(&d.to_be_bytes());
+        let (n, d) = frac_u(p.gamma[c]);
+        meta.extend_from_slice(&n.to_be_bytes());
+        meta.extend_from_slice(&d.to_be_bytes());
+        let (n, d) = frac_s(0.015625); // baseOffset
+        meta.extend_from_slice(&n.to_be_bytes());
+        meta.extend_from_slice(&d.to_be_bytes());
+        let (n, d) = frac_s(0.015625); // alternateOffset
+        meta.extend_from_slice(&n.to_be_bytes());
+        meta.extend_from_slice(&d.to_be_bytes());
+    }
+    debug_assert_eq!(meta.len(), 137);
+    let mut seg = Vec::with_capacity(2 + 2 + SIG.len() + 4 + meta.len());
+    seg.extend_from_slice(&[0xFF, 0xE2]);
+    let len = (SIG.len() + 4 + meta.len() + 2) as u16;
+    seg.extend_from_slice(&len.to_be_bytes());
+    seg.extend_from_slice(SIG);
+    seg.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // min_version, writer_version
+    seg.extend_from_slice(&meta);
     seg
 }
 
@@ -381,7 +443,7 @@ pub fn assemble(base_jpeg: &[u8], gain_jpeg: &[u8], params: &GainMapParams, base
     let mut secondary = Vec::new();
     secondary.extend_from_slice(&[0xFF, 0xD8]);
     secondary.extend_from_slice(&xmp_segment(&secondary_xmp(params)));
-    secondary.extend_from_slice(&iso_segment());
+    secondary.extend_from_slice(&iso_gainmap_segment(params));
     secondary.extend_from_slice(&gain_jpeg[2..]);
 
     // Primary image head: SOI | APP0 | APPn metadata | APP1(XMP) | APP2(MPF) |
