@@ -32,7 +32,7 @@ use crate::{EngineError, LibrarySource, Result, Selection, Session};
 /// Library directory name inside the user's Pictures folder.
 pub const DEFAULT_NAME: &str = "Lightroom by Tony Library";
 
-/// The default library location: `$LIGHTCRAFT_LIBRARY` if set, else `~/Pictures/LightCraft Library`
+/// The default library location: `$LIGHTCRAFT_LIBRARY` if set, else `~/Pictures/Lightroom by Tony Library`
 /// (`%USERPROFILE%\Pictures\LightCraft Library` on Windows).
 pub fn default_dir() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("LIGHTCRAFT_LIBRARY").filter(|p| !p.is_empty()) {
