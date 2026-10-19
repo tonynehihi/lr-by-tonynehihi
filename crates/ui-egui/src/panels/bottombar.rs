@@ -47,9 +47,13 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         });
 }
 
-/// Width of the centre group: the rating/flag pill, then Copy/Paste Edit Settings and its gear.
+/// Width of the centre group: the rating/flag pill, then separate Copy and Paste Settings
+/// buttons, the copy-options gear, and a Select All/None toggle.
 const PILL_W: f32 = 196.0;
-const CENTRE_W: f32 = PILL_W + 10.0 + 136.0 + 4.0 + 30.0;
+const COPY_W: f32 = 112.0;
+const PASTE_W: f32 = 112.0;
+const ALL_W: f32 = 46.0;
+const CENTRE_W: f32 = PILL_W + 10.0 + COPY_W + 6.0 + PASTE_W + 4.0 + 30.0 + 6.0 + ALL_W;
 
 /// The rating/flag pill and copy/paste settings, between `from` and `to` (the side groups): the
 /// copy buttons go first when there is no room (they are in the Edit menu too), then the pill.
@@ -95,35 +99,72 @@ fn centre(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, from: f32, to:
             let _ = app.run("photo.flag", params);
         }
     }
-    // copy / paste settings
+    // copy / paste settings: two separate buttons side by side, so new settings can be
+    // copied at any time (the old single button flipped to Paste once something was copied)
     if !with_copy {
         return;
     }
-    let copy_r = Rect::from_min_size(pos2(pill.right() + 10.0, pill.top()), vec2(136.0, 30.0));
     let has_clip = app.session.clipboard.is_some();
-    let label = if has_clip { "Paste Edit Settings" } else { "Copy Edit Settings" };
+    let copy_r = Rect::from_min_size(pos2(pill.right() + 10.0, pill.top()), vec2(COPY_W, 30.0));
     let cresp = ui.interact(copy_r, egui::Id::new("copy-settings"), Sense::click());
     register(ui.ctx(), "button:copySettings", copy_r);
-    ui.painter().rect_filled(copy_r, 15.0, if cresp.hovered() { t.hover } else { t.canvas });
+    ui.painter().rect_filled(copy_r, 15.0, if cresp.hovered() && active.is_some() { t.hover } else { t.canvas });
     ui.painter().text(
         copy_r.center(),
         Align2::CENTER_CENTER,
-        crate::i18n::tr(label),
+        crate::i18n::tr("Copy Settings"),
         t.font(13.0),
         if active.is_some() { t.text_label } else { t.text_disabled },
     );
     if cresp.clicked() && active.is_some() {
-        let _ = if has_clip { app.run("develop.paste", json!({})) } else { app.run("develop.copy", json!({})) };
-        let msg = if has_clip { "Settings pasted" } else { "Edit settings copied" };
-        app.toast(ui.ctx(), msg);
+        let _ = app.run("develop.copy", json!({}));
+        app.toast(ui.ctx(), "Edit settings copied");
     }
-    let gear_r = Rect::from_min_size(pos2(copy_r.right() + 4.0, pill.top()), vec2(30.0, 30.0));
+    let paste_r = Rect::from_min_size(pos2(copy_r.right() + 6.0, pill.top()), vec2(PASTE_W, 30.0));
+    let presp = ui.interact(paste_r, egui::Id::new("paste-settings"), Sense::click());
+    register(ui.ctx(), "button:pasteSettings", paste_r);
+    ui.painter().rect_filled(paste_r, 15.0, if presp.hovered() && has_clip { t.hover } else { t.canvas });
+    ui.painter().text(
+        paste_r.center(),
+        Align2::CENTER_CENTER,
+        crate::i18n::tr("Paste Settings"),
+        t.font(13.0),
+        if has_clip { t.text_label } else { t.text_disabled },
+    );
+    if presp.clicked() && has_clip {
+        // paste applies to every selected photo (the engine's targets), not just the active one
+        match app.run("develop.paste", json!({})) {
+            Ok(r) => {
+                let n = r["changed"].as_u64().unwrap_or(0);
+                app.toast(ui.ctx(), format!("Settings pasted to {n} photo{}", if n == 1 { "" } else { "s" }));
+            }
+            Err(e) => app.toast(ui.ctx(), e),
+        }
+    }
+    let gear_r = Rect::from_min_size(pos2(paste_r.right() + 4.0, pill.top()), vec2(30.0, 30.0));
     let gresp = ui.interact(gear_r, egui::Id::new("copy-gear"), Sense::click());
     register(ui.ctx(), "icon:copyGear", gear_r);
     ui.painter().rect_filled(gear_r, 15.0, if gresp.hovered() { t.hover } else { t.canvas });
     paint(ui.painter(), gear_r.shrink(7.0), Icon::Gear, t.icon);
     if gresp.clicked() {
         let _ = app.run("dialog.copySettings", json!({}));
+    }
+    // select all / none toggle for the photos in view
+    let vis_n = app.session.visible_cloned().len();
+    let all_sel = vis_n > 0 && app.session.selection.ids.len() >= vis_n;
+    let all_r = Rect::from_min_size(pos2(gear_r.right() + 6.0, pill.top()), vec2(ALL_W, 30.0));
+    let aresp = ui.interact(all_r, egui::Id::new("select-all"), Sense::click());
+    register(ui.ctx(), "button:selectAll", all_r);
+    ui.painter().rect_filled(all_r, 15.0, if aresp.hovered() && vis_n > 0 { t.hover } else { t.canvas });
+    ui.painter().text(
+        all_r.center(),
+        Align2::CENTER_CENTER,
+        crate::i18n::tr(if all_sel { "None" } else { "All" }),
+        t.font(12.5),
+        if vis_n > 0 { t.text_label } else { t.text_disabled },
+    );
+    if aresp.clicked() && vis_n > 0 {
+        let _ = app.run(if all_sel { "library.selectNone" } else { "library.selectAll" }, json!({}));
     }
 }
 

@@ -6,6 +6,13 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 - Giao diện **sáng/tối**: vào Settings (⌘,) → Interface → Theme
 - Icon **LrT** phong cách Adobe, tên app "Lightroom by Tony"
 
+## Mới ở bản 1.1.4 — chọn nhiều ảnh + Copy/Paste tách nút
+
+- Thanh dưới có **2 nút riêng**: **Copy Settings** và **Paste Settings** (trước đây gộp 1 nút, copy xong là mất nút copy). Copy lúc nào cũng được, không cần paste trước.
+- **Chọn nhiều ảnh trong filmstrip**: bấm **vòng tròn tick** ở góc trên-phải mỗi ảnh thu nhỏ để chọn/bỏ chọn (ảnh đã chọn có dấu ✓ xanh). Hoặc: **⌘+click** = chọn thêm/bỏ chọn, **Shift+click** = chọn cả loạt từ ảnh đang chọn tới ảnh vừa bấm.
+- Nút **All / None** ở thanh dưới: chọn tất cả ảnh đang hiển thị / bỏ chọn hết.
+- **Paste Settings** sẽ dán vào **toàn bộ ảnh đã chọn** (không chỉ ảnh đang mở). Export (File → Export) cũng xuất đúng những ảnh đã chọn.
+
 ## Gỡ bản cũ / cài lại sạch
 
 **Nếu mày đã build bản trước:**
@@ -78,6 +85,26 @@ Kéo 1 ngón để di chuyển ảnh khi đã zoom.
 
 Nhấn `⌘,` (Settings) → tab **Interface** → mục **Theme** → chọn Dark hoặc Light.
 
-## Gặp lỗi
+## App không mở được (macOS chặn app tự đóng gói)
 
-Chụp màn hình lỗi gửi tao.
+App tự đóng gói không có chữ ký Apple nên macOS hay chặn — không phải app hỏng.
+
+**Trường hợp 1** — macOS báo app "from an unidentified developer":
+Chuột phải vào app → chọn **Open** → bấm **Open** trong hộp thoại hiện ra.
+
+**Trường hợp 2** — macOS báo app "is damaged" hoặc "can't be opened":
+1. Mở Terminal.
+2. Gõ đúng dòng này rồi Enter:
+```bash
+xattr -cr "/Applications/Lightroom by Tony.app"
+```
+3. Mở app lại bình thường.
+
+**Trường hợp 3** — app crash / tắt ngay khi mở:
+Kiểm tra lại **Bước 6** đã đúng chip máy chưa — máy Apple Silicon (M1/M2/M3/M4) phải dùng `--arch aarch64`, máy Intel cũ dùng `--arch x86_64`. Đóng gói sai chip là crash luôn, phải đóng gói lại.
+
+## Build báo lỗi
+
+- Thiếu `xcode-select`: chạy `xcode-select --install` rồi build lại.
+- Terminal không nhận lệnh `cargo`: đóng Terminal, mở lại (Rust mới thêm vào PATH sau khi cài).
+- Lỗi khác: chụp màn hình lỗi gửi tao.

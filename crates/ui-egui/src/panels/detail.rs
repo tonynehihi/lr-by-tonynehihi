@@ -1550,9 +1550,12 @@ pub(crate) fn filmstrip(app: &mut LightcraftApp, ui: &mut egui::Ui, r: Rect) {
             let resp = ui.interact(cr, egui::Id::new(("film", id.0)), Sense::click());
             register(ui.ctx(), format!("film:{}", id.0), cr);
             let sel = Some(*id) == active;
+            let in_sel = app.session.selection.contains(*id);
             let p = ui.painter();
             if sel {
                 p.rect_filled(cr, 0.0, t.cell_selected);
+            } else if in_sel {
+                p.rect_filled(cr, 0.0, t.cell_selected.gamma_multiply(0.55));
             } else if resp.hovered() {
                 p.rect_filled(cr, 0.0, t.cell_selected.gamma_multiply(0.6));
             }
@@ -1588,7 +1591,27 @@ pub(crate) fn filmstrip(app: &mut LightcraftApp, ui: &mut egui::Ui, r: Rect) {
                     p.galley(pos2(br.min.x + 17.0, br.center().y - g.size().y / 2.0), g, Color32::WHITE);
                 }
             }
-            if resp.clicked() {
+            // selection tick at the image's top-right corner: toggles this photo in the
+            // selection without changing the active photo (paste/export act on the selection)
+            let tick_c = pos2(img_area.right() - 13.0, img_area.top() + 13.0);
+            let tick_r = Rect::from_center_size(tick_c, vec2(20.0, 20.0));
+            let tick_resp = ui.interact(tick_r, egui::Id::new(("filmtick", id.0)), Sense::click());
+            register(ui.ctx(), format!("filmTick:{}", id.0), tick_r);
+            if in_sel {
+                p.circle_filled(tick_c, 9.0, t.accent);
+                let a = tick_c + vec2(-4.5, -0.2);
+                let b = tick_c + vec2(-1.4, 3.2);
+                let c = tick_c + vec2(4.8, -3.8);
+                p.line_segment([a, b], Stroke::new(2.0, Color32::WHITE));
+                p.line_segment([b, c], Stroke::new(2.0, Color32::WHITE));
+            } else {
+                p.circle_filled(tick_c, 9.0, Color32::from_black_alpha(110));
+                p.circle_stroke(tick_c, 9.0, Stroke::new(1.2, if tick_resp.hovered() { Color32::WHITE } else { Color32::from_white_alpha(140) }));
+            }
+            if tick_resp.clicked() {
+                let _ = app.run("library.select", json!({"ids": [id.0], "mode": "toggle"}));
+            }
+            if resp.clicked() && !tick_resp.clicked() {
                 let m = ui.input(|i| i.modifiers);
                 let mode = if m.command {
                     "toggle"

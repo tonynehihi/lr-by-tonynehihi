@@ -4,20 +4,23 @@
 
     wix build lightcraft.wxs -arch x64 -d Version=1.2.3 -d BinDir=... -d IconPath=... -o out.msi
 
-  Per-machine install into Program Files, a Start Menu shortcut, `.pcraft` owned by LightCraft,
-  and LightCraft offered under "Open with" for PSD/PSB and the image formats it reads (without
+  Per-machine install into Program Files, a Start Menu shortcut, `.pcraft` owned by Lightroom by Tony,
+  and Lightroom by Tony offered under "Open with" for PSD/PSB and the image formats it reads (without
   taking over the user's default app for them).
+
+  Tony's local rebrand: product/shortcut names say "Lightroom by Tony" and the LrT icon
+  (assets/app-icon/lrt.ico) is used instead of the upstream LightCraft ones.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
-      Name="LightCraft"
+      Name="Lightroom by Tony"
       Manufacturer="Learning Machines LLC"
       Version="$(var.Version)"
       UpgradeCode="229BB552-5EFD-479A-BA86-8CB6D926390C"
       Scope="perMachine"
       Compressed="yes"
       Language="1033">
-    <SummaryInformation Description="LightCraft photo library and raw developer" Manufacturer="Learning Machines LLC" />
+    <SummaryInformation Description="Lightroom by Tony photo library and raw developer" Manufacturer="Learning Machines LLC" />
     <!-- Same-version upgrades let successive pre-releases of one X.Y.Z replace each other
          (MSI versions are numeric, so 1.2.3-rc.1 and 1.2.3-rc.2 are both 1.2.3). -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
@@ -44,8 +47,8 @@
     <ComponentGroup Id="LightcraftFiles" Directory="INSTALLFOLDER">
       <Component Id="LightcraftApp" Guid="8A1D3A39-F7C1-47B1-97AE-40C80BF82F4A">
         <File Id="LightcraftExe" Source="$(var.BinDir)\lightcraft.exe" KeyPath="yes">
-          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="LightCraft"
-              Description="LightCraft photo library and raw developer" WorkingDirectory="INSTALLFOLDER" Advertise="yes"
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="Lightroom by Tony"
+              Description="Lightroom by Tony photo library and raw developer" WorkingDirectory="INSTALLFOLDER" Advertise="yes"
               Icon="LightcraftIcon.ico" IconIndex="0" />
         </File>
 
