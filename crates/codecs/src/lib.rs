@@ -1,7 +1,8 @@
 //! Standard image codecs for LightCraft (layer L1).
 //!
 //! - [`sniff`] detects the container format (and flags camera raws for `lightcraft-raw`).
-//! - [`decode`] decodes JPEG, PNG, TIFF, WebP, GIF, BMP, PSD (merged composite) and JPEG XL into
+//! - [`decode`] decodes JPEG, PNG, TIFF, WebP, GIF, BMP, PSD (merged composite) and JPEG XL — plus
+//!   HEIC in macOS builds of this fork, via the operating system's decoder (see `heif`) — into
 //!   **linear-light** [`Rgb32f`] in the source's own primaries, described by [`SourceSpace`]; ICC
 //!   profiles (matrix/TRC exactly, LUT/CMYK via the `moxcms` CMS), 16-bit and float precision are
 //!   preserved. EXIF/XMP/ICC blobs are passed through untouched; orientation is reported, never applied.
@@ -17,6 +18,8 @@
 mod convert;
 pub mod encode;
 pub mod exif;
+#[cfg(target_os = "macos")]
+mod heif;
 pub mod icc;
 mod jpeg;
 pub mod jpeg_par;
@@ -173,7 +176,10 @@ pub fn decode_unguarded(bytes: &[u8], format: Format, opts: &DecodeOptions) -> R
         #[cfg(not(feature = "jxl"))]
         Format::Jxl => Err(Error::Unsupported(format, "built without the `jxl` feature")),
         Format::Avif => Err(Error::Unsupported(format, "no pure-Rust, permissively licensed AV1 decoder yet")),
-        Format::Heif => Err(Error::Unsupported(format, "no pure-Rust, permissively licensed HEVC decoder yet")),
+        #[cfg(target_os = "macos")]
+        Format::Heif => heif::decode(bytes, &opts),
+        #[cfg(not(target_os = "macos"))]
+        Format::Heif => Err(Error::Unsupported(format, "HEIC decoding is only available in the macOS build of this fork")),
         Format::RawTiffLike | Format::RawOther => Err(Error::Unsupported(format, "camera raw: decode with lightcraft-raw")),
     }
 }

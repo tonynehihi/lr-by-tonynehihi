@@ -99,6 +99,27 @@ fn copy_paste_sync_presets() {
 }
 
 #[test]
+fn copy_refused_when_selected_settings_differ() {
+    let mut s = demo();
+    let vis = s.visible_cloned();
+    // photo A gets a distinctive exposure; copying from A alone works
+    s.execute("develop.set", &json!({"values": {"light.exposure": 1.0}})).unwrap();
+    s.execute("develop.copy", &json!({})).unwrap();
+    let clip = s.clipboard.clone();
+    // selecting A (edited) + B (untouched) makes the copy ambiguous: refused,
+    // and the earlier clipboard survives untouched
+    s.execute("library.select", &json!({"ids": [vis[0].0, vis[1].0]})).unwrap();
+    let err = s.execute("develop.copy", &json!({})).unwrap_err();
+    assert!(err.to_string().contains("different edit settings"), "{err}");
+    assert_eq!(s.clipboard, clip);
+    // after pasting A's settings onto B the two agree, and copying both is fine
+    s.execute("library.select", &json!({"ids": [vis[1].0]})).unwrap();
+    s.execute("develop.paste", &json!({})).unwrap();
+    s.execute("library.select", &json!({"ids": [vis[0].0, vis[1].0]})).unwrap();
+    s.execute("develop.copy", &json!({})).unwrap();
+}
+
+#[test]
 fn albums_crud() {
     let mut s = demo();
     let f = s.execute("album.create", &json!({"name": "Trips", "folder": true})).unwrap()["id"].as_u64().unwrap();

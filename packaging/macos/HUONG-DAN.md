@@ -6,6 +6,14 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 - Giao diện **sáng/tối**: vào Settings (⌘,) → Interface → Theme
 - Icon **LrT** phong cách Adobe, tên app "Lightroom by Tony"
 
+## Mới ở bản 1.1.6 — HEIC, pop-up file mất, hỏi update khi mở app
+
+- **Icon chuẩn macOS**: icon LrT bo góc squircle + đệm trong suốt đúng lưới icon macOS, hết vuông full viền trên Dock.
+- **Đọc được file HEIC** (bản macOS): ảnh .heic từ iPhone import, xem và chỉnh như ảnh thường (app mượn bộ giải mã HEIC có sẵn trong macOS; bản Windows chưa đọc được HEIC).
+- **Ảnh mất file gốc**: mở ảnh để chỉnh mà file gốc đã bị di chuyển/xóa ở ngoài app → hiện pop-up: **Locate File...** (chọn lại vị trí mới — app kiểm chứng đúng ảnh bằng nội dung, file trùng tên nhưng khác ảnh bị từ chối), **Remove from Library** (gỡ hẳn khỏi thư viện), **Not Now** (để sau).
+- **Copy Settings**: chọn nhiều ảnh có settings khác nhau thì không copy được nữa, tránh nhầm lẫn đang copy settings của ảnh nào. Chọn 1 ảnh, hoặc các ảnh settings giống nhau, copy bình thường.
+- **Mở app hỏi update**: có bản mới mới hiện pop-up, kèm **What's new** (changelog) để đọc trước; không có bản mới thì không hiện gì. Bấm **Later** thì lần mở sau hỏi lại. Cài bản này bằng chính nút update trong app 1.1.5: **Help → Check for Updates**.
+
 ## Mới ở bản 1.1.5 — tự kiểm tra & cài bản mới (Check for Updates)
 
 - Vào **Help → Check for Updates** (hoặc mở **About Lightroom by Tony**, mục **Updates** ở dưới cùng): app tự hỏi GitHub xem có bản mới hơn không.

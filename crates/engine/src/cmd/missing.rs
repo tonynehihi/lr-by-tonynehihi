@@ -68,6 +68,33 @@ fn relink(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(C, "only photos from files can be relinked"));
     }
     let abs = abs.to_string_lossy().to_string();
+    // With `verify` (the missing-photo prompt passes it) a file that is not the photo
+    // the library knows is refused: a same-name look-alike must never be linked in
+    // by mistake. The stored content hash decides when there is one; the file size
+    // is the fallback. Without `verify` the choice stands as made — relinking to
+    // another export of the photo is a deliberate act there.
+    if p.get("verify").and_then(Value::as_bool) == Some(true) {
+        let ph = s.catalog.photo(id).ok_or_else(|| bad(C, "no such photo"))?;
+        match stored_hash(ph) {
+            Some(h) => {
+                if file_hash(&abs).as_deref() != Some(h) {
+                    return Err(bad(
+                        C,
+                        "That file is not the same photo — its content does not match the photo in the library, so it was not linked. Choose the photo's actual file.",
+                    ));
+                }
+            }
+            None => {
+                let size = std::fs::metadata(&abs).map(|m| m.len()).unwrap_or(0);
+                if ph.file_size > 0 && size != ph.file_size {
+                    return Err(bad(
+                        C,
+                        "That file is not the same photo — its size differs from the photo in the library, so it was not linked. Choose the photo's actual file.",
+                    ));
+                }
+            }
+        }
+    }
     // the file may differ from the one imported (another export, a raw that decodes now or not):
     // its size, dimensions and preview-only state follow it
     let mut ops = vec![relink_op(id, &abs)];
@@ -346,7 +373,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Locate Photo",
             [],
             None,
-            "{id?, path} — point a photo at its file's new location (undo never moves files)",
+            "{id?, path, verify?} — point a photo at its file's new location (undo never moves files); verify: refuse a file that is not the photo the library knows (content hash, else size)",
             always,
             relink
         ),

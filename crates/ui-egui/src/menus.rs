@@ -1065,8 +1065,11 @@ pub fn run_ui_command(app: &mut LightcraftApp, id: &str, p: &Value) -> Option<Re
                 Some(x) => Some(x.to_string()),
                 None => app.services.pick_files.as_mut().and_then(|f| f().into_iter().next()),
             };
+            // `verify` (the missing-photo prompt passes it) makes the engine refuse a
+            // file that is not the photo the library knows
+            let verify = p.get("verify").and_then(Value::as_bool).unwrap_or(false);
             match path {
-                Some(path) => app.run("photo.relink", json!({"id": id.0, "path": path})),
+                Some(path) => app.run("photo.relink", json!({"id": id.0, "path": path, "verify": verify})),
                 None => Ok(Value::Null),
             }
         }

@@ -66,7 +66,9 @@ impl Format {
     pub fn can_decode(self) -> bool {
         match self {
             Format::Jxl => cfg!(feature = "jxl"),
-            Format::Avif | Format::Heif | Format::RawTiffLike | Format::RawOther => false,
+            // macOS builds of this fork decode HEVC through the system decoder (see `heif`).
+            Format::Heif => cfg!(target_os = "macos"),
+            Format::Avif | Format::RawTiffLike | Format::RawOther => false,
             _ => true,
         }
     }

@@ -61,11 +61,25 @@ pub struct UpdateState {
     pub phase: Phase,
     rx: Option<Receiver<JobMsg>>,
     cancel: Arc<AtomicBool>,
+    /// The launch-time prompt is open (only ever set when a startup check found a
+    /// newer release; see [`UpdateState::start_check_at_startup`]).
+    pub prompt: bool,
+    /// Version the user already waved away with "Later" this run: don't prompt again for it.
+    dismissed: Option<String>,
+    /// A check started at launch still owes a prompt decision when it lands.
+    startup_armed: bool,
 }
 
 impl Default for UpdateState {
     fn default() -> Self {
-        UpdateState { phase: Phase::Idle, rx: None, cancel: Arc::new(AtomicBool::new(false)) }
+        UpdateState {
+            phase: Phase::Idle,
+            rx: None,
+            cancel: Arc::new(AtomicBool::new(false)),
+            prompt: false,
+            dismissed: None,
+            startup_armed: false,
+        }
     }
 }
 
@@ -76,8 +90,21 @@ impl UpdateState {
 
     /// Ask GitHub for the newest release (no-op while another job runs).
     pub fn start_check(&mut self) {
+        self.begin_check(false);
+    }
+
+    /// The launch-time check: if it finds a newer release, the prompt opens
+    /// (see [`prompt_window`]); up-to-date and failure stay silent.
+    pub fn start_check_at_startup(&mut self) {
+        self.begin_check(true);
+    }
+
+    fn begin_check(&mut self, startup: bool) {
         if self.busy() {
             return;
+        }
+        if startup {
+            self.startup_armed = true;
         }
         self.cancel.store(false, Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -87,6 +114,23 @@ impl UpdateState {
         std::thread::spawn(move || {
             let _ = tx.send(JobMsg::Check(check_latest(&cancel)));
         });
+    }
+
+    /// Close the launch prompt; `remember` also stores the version on offer so the
+    /// prompt does not reopen for it during this run.
+    pub fn dismiss_prompt(&mut self, remember: bool) {
+        self.prompt = false;
+        if !remember {
+            return;
+        }
+        let version = match &self.phase {
+            Phase::Available(info) => Some(info.version.clone()),
+            Phase::Downloaded { info, .. } => Some(info.version.clone()),
+            _ => None,
+        };
+        if let Some(v) = version {
+            self.dismissed = Some(v);
+        }
     }
 
     /// Download the source archive of the release in [`Phase::Available`] (macOS auto-install path).
@@ -123,9 +167,21 @@ impl UpdateState {
                 match rx.try_recv() {
                     Ok(JobMsg::Check(res)) => {
                         self.phase = match res {
-                            Ok(Some(info)) => Phase::Available(info),
-                            Ok(None) => Phase::UpToDate,
-                            Err(e) => Phase::Failed(e),
+                            Ok(Some(info)) => {
+                                if prompt_wanted(self.startup_armed, self.dismissed.as_deref(), &info.version) {
+                                    self.prompt = true;
+                                }
+                                self.startup_armed = false;
+                                Phase::Available(info)
+                            }
+                            Ok(None) => {
+                                self.startup_armed = false;
+                                Phase::UpToDate
+                            }
+                            Err(e) => {
+                                self.startup_armed = false;
+                                Phase::Failed(e)
+                            }
                         };
                         finished = true;
                     }
@@ -226,6 +282,12 @@ fn update_dir() -> Option<PathBuf> {
     p.push("Lightroom by Tony");
     p.push("updates");
     Some(p)
+}
+
+/// The launch prompt opens only for a startup check that found a version the
+/// user has not already waved away with "Later" during this run.
+fn prompt_wanted(armed: bool, dismissed: Option<&str>, version: &str) -> bool {
+    armed && dismissed != Some(version)
 }
 
 /// Split a version into numeric parts ("1.10.2" → [1, 10, 2]); non-numeric tails count as 0.
@@ -509,6 +571,107 @@ pub fn about_section(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     }
 }
 
+/// The launch-time update prompt: [`UpdateState::poll`] opens it when the startup
+/// check found a newer release, and only then — a launch with nothing new (or no
+/// connection) shows nothing. It shows the release notes (the changelog) so the
+/// choice is informed, then runs the same download/install flow as About.
+pub fn prompt_window(app: &mut LightcraftApp, ctx: &egui::Context) {
+    if !app.updates.prompt {
+        return;
+    }
+    let t = Tokens::get(ctx);
+    let phase = app.updates.phase.clone();
+    // a phase with nothing to ask about closes the prompt again
+    if matches!(phase, Phase::Idle | Phase::Checking | Phase::UpToDate) {
+        app.updates.prompt = false;
+        return;
+    }
+    let mut close_remember = false;
+    let mut close_plain = false;
+    egui::Window::new("A new version is available")
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.set_width(430.0);
+            match &phase {
+                Phase::Available(info) => {
+                    ui.label(format!("Version {} is available - you have {}.", info.version, env!("CARGO_PKG_VERSION")));
+                    if !info.notes.trim().is_empty() {
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new("What's new").font(t.semibold(13.0)).color(t.text));
+                        egui::ScrollArea::vertical().id_salt("prompt-update-notes").max_height(180.0).show(ui, |ui| {
+                            ui.label(egui::RichText::new(info.notes.trim()).color(t.text_dim));
+                        });
+                    }
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        if cfg!(target_os = "macos") {
+                            if crate::widgets::text_button(ui, "promptUpdateDownload", "Download Update", false).clicked() {
+                                app.updates.start_download();
+                            }
+                        } else if crate::widgets::text_button(ui, "promptUpdatePage", "Open Release Page", false).clicked() {
+                            if !info.page_url.is_empty() {
+                                let url = info.page_url.clone();
+                                let _ = crate::links::open(app, &url);
+                            }
+                        }
+                        if crate::widgets::text_button(ui, "promptUpdateLater", "Later", false).clicked() {
+                            close_remember = true;
+                        }
+                    });
+                }
+                Phase::Downloading { received, total, .. } => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(format!("Downloading update... {:.1} MB", *received as f64 / 1_000_000.0));
+                    });
+                    if let Some(total) = total {
+                        if *total > 0 {
+                            let frac = (*received as f64 / *total as f64).clamp(0.0, 1.0) as f32;
+                            ui.add(egui::ProgressBar::new(frac).desired_width(300.0));
+                        }
+                    }
+                    ui.add_space(4.0);
+                    if crate::widgets::text_button(ui, "promptUpdateHide", "Hide", false).clicked() {
+                        close_plain = true;
+                    }
+                }
+                Phase::Downloaded { info, .. } => {
+                    ui.label(format!("Update {} is downloaded.", info.version));
+                    ui.label(egui::RichText::new("Installing quits the app, rebuilds (a few minutes) and reopens it.").color(t.text_dim));
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        if crate::widgets::text_button(ui, "promptUpdateInstall", "Quit & Install", false).clicked() {
+                            match app.updates.install() {
+                                Ok(()) => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
+                                Err(e) => app.updates.phase = Phase::Failed(e),
+                            }
+                        }
+                        if crate::widgets::text_button(ui, "promptUpdateLater2", "Later", false).clicked() {
+                            app.updates.phase = Phase::Available(info.clone());
+                            close_remember = true;
+                        }
+                    });
+                }
+                Phase::Failed(msg) => {
+                    ui.label(egui::RichText::new(msg.as_str()).color(t.text_dim));
+                    ui.add_space(4.0);
+                    if crate::widgets::text_button(ui, "promptUpdateClose", "Close", false).clicked() {
+                        close_plain = true;
+                    }
+                }
+                _ => {}
+            }
+        });
+    if close_remember {
+        app.updates.dismiss_prompt(true);
+    }
+    if close_plain {
+        app.updates.dismiss_prompt(false);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,6 +702,14 @@ mod tests {
         assert_eq!(info.name, "Lightroom by Tony 1.2.3");
         assert_eq!(info.notes, "What changed.");
         assert!(info.zip_url.ends_with("/zipball/v1.2.3"));
+    }
+
+    #[test]
+    fn launch_prompt_only_for_a_fresh_startup_find() {
+        assert!(prompt_wanted(true, None, "1.1.6"));
+        assert!(!prompt_wanted(false, None, "1.1.6"), "manual checks never prompt");
+        assert!(!prompt_wanted(true, Some("1.1.6"), "1.1.6"), "already waved away with Later");
+        assert!(prompt_wanted(true, Some("1.1.5"), "1.1.6"), "a newer find prompts again");
     }
 
     #[test]

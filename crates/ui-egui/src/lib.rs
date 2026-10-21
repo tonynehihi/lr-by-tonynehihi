@@ -17,6 +17,7 @@ pub mod links;
 pub mod menubar;
 pub mod menus;
 pub mod merge;
+pub mod missing;
 pub mod panels;
 pub mod render;
 pub mod shortcuts;
@@ -151,6 +152,12 @@ pub struct LightcraftApp {
     pub quit_confirmed: bool,
     /// GitHub update check/download state (About dialog, Help ▸ Check for Updates).
     pub updates: updates::UpdateState,
+    /// The launch-time GitHub update check has been kicked off (once per run).
+    startup_update_check_done: bool,
+    /// Photos whose missing-file prompt was waved away this run (see `missing`).
+    pub missing_dismissed: std::collections::HashSet<lightcraft_catalog::PhotoId>,
+    /// Why the last missing-photo action failed (shown inside the prompt).
+    pub missing_error: Option<String>,
     control_rx: Option<Receiver<ControlRequest>>,
     pending_screenshots: Vec<PendingShot>,
     screenshot_token: u64,
@@ -227,6 +234,9 @@ impl LightcraftApp {
             quit_prompt: None,
             quit_confirmed: false,
             updates: updates::UpdateState::default(),
+            startup_update_check_done: false,
+            missing_dismissed: Default::default(),
+            missing_error: None,
             control_rx: None,
             pending_screenshots: vec![],
             screenshot_token: 0,
@@ -827,7 +837,18 @@ impl LightcraftApp {
         import::scan_progress(self, &ctx);
         export_task::poll(self, &ctx);
         panels::grid::drag_feedback(self, &ctx);
+        // Personal build: one silent update check at launch; the prompt opens only
+        // when a newer release exists (updates::prompt_window), never otherwise.
+        if !self.startup_update_check_done {
+            self.startup_update_check_done = true;
+            self.updates.start_check_at_startup();
+        }
+        if self.updates.poll() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+        }
         panels::toast(self, &ctx);
+        crate::updates::prompt_window(self, &ctx);
+        crate::missing::window(self, &ctx);
         self.widgets = widgets::take_registry(&ctx);
         self.end_frame(t0);
     }

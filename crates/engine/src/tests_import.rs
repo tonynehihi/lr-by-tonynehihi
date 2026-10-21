@@ -192,6 +192,43 @@ fn find_missing_matches_renamed_files_by_content() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `photo.relink` with `verify` (what the missing-photo prompt passes): the photo's real
+/// file is accepted even under a new name; a same-name, same-size impostor is refused and
+/// the catalog keeps pointing at the old path. Without `verify` the choice stands.
+#[test]
+fn relink_verify_accepts_the_real_file_and_refuses_an_impostor() {
+    use crate::cmd::missing::checked_path;
+    let dir = temp_dir("relink-verify");
+    std::fs::create_dir_all(dir.join("old")).unwrap();
+    std::fs::create_dir_all(dir.join("new")).unwrap();
+    write_png(&dir.join("old").join("a.png"), 7);
+    let mut s = Session::new().with_fs();
+    s.execute("library.import", &json!({"paths": [dir.join("old").to_string_lossy()]})).unwrap();
+    let a = s.catalog.photos().next().unwrap().id;
+    let old_path = dir.join("old").join("a.png").to_string_lossy().to_string();
+    assert_eq!(checked_path(s.catalog.photo(a).unwrap()), Some(old_path.as_str()));
+    // the file moves away under a new name; an impostor (same name and size, other
+    // bytes) waits in the folder the user would pick from
+    std::fs::rename(dir.join("old/a.png"), dir.join("new/renamed.png")).unwrap();
+    let mut bytes = std::fs::read(dir.join("new/renamed.png")).unwrap();
+    let k = bytes.len() - 20;
+    bytes[k] ^= 0xff;
+    std::fs::write(dir.join("new/a.png"), &bytes).unwrap();
+    // the impostor is refused with verify, and nothing changes
+    let err = s
+        .execute("photo.relink", &json!({"id": a.0, "path": dir.join("new/a.png").to_string_lossy(), "verify": true}))
+        .unwrap_err();
+    assert!(err.to_string().contains("not the same photo"), "{err}");
+    assert_eq!(checked_path(s.catalog.photo(a).unwrap()), Some(old_path.as_str()));
+    // the real file is accepted, under its new name
+    s.execute("photo.relink", &json!({"id": a.0, "path": dir.join("new/renamed.png").to_string_lossy(), "verify": true})).unwrap();
+    let new_path = dir.join("new").join("renamed.png").to_string_lossy().to_string();
+    assert_eq!(checked_path(s.catalog.photo(a).unwrap()), Some(new_path.as_str()));
+    // without verify, pointing the photo at the impostor stands (the historical behaviour)
+    s.execute("photo.relink", &json!({"id": a.0, "path": dir.join("new/a.png").to_string_lossy()})).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Issue #104: the app plans Find Missing on a worker thread (no session) and relinks the plan
 /// afterwards; that gives exactly what the synchronous command gives — renamed files by content,
 /// impostors and look-alikes skipped (`ambiguous`).

@@ -24,7 +24,10 @@ This repository is **not** the official LightCraft and is not a public product r
 - **Pinch-to-zoom** with a two-finger trackpad gesture in the photo view.
 - **Light/dark interface** (Settings → Interface → Theme).
 - **Multi-select in the filmstrip** (checkmark circles, ⌘+click, Shift+click, All/None buttons) and **Copy Settings / Paste Settings as two separate buttons**; Paste applies to every selected photo.
-- **Built-in self-update** (since 1.1.5): *Help → Check for Updates* — the app checks the Releases of this repo for the newest version, then downloads, builds and installs it on macOS by itself.
+- **Built-in self-update** (since 1.1.5): *Help → Check for Updates* — the app checks the Releases of this repo for the newest version, then downloads, builds and installs it on macOS by itself. Since 1.1.6 it also checks once at launch and, only when a newer version exists, asks with the release's changelog on screen.
+- **HEIC photos work on macOS** (since 1.1.6): .heic files from an iPhone import, display and edit like any other photo, decoded by the operating system.
+- **Missing-file prompt with verified relinking** (since 1.1.6): opening a photo whose original file was moved or deleted offers to locate it again — the candidate file is verified against the photo's content, so a same-name look-alike is refused — or to remove the photo from the library.
+- **A proper macOS icon** (since 1.1.6): the LrT artwork sits in the standard squircle with the standard transparent margin, like every other app in the Dock.
 
 ## Installing on macOS
 

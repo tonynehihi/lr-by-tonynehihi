@@ -117,8 +117,12 @@ fn centre(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, from: f32, to:
         if active.is_some() { t.text_label } else { t.text_disabled },
     );
     if cresp.clicked() && active.is_some() {
-        let _ = app.run("develop.copy", json!({}));
-        app.toast(ui.ctx(), "Edit settings copied");
+        // the engine refuses to copy when the selected photos' settings differ;
+        // surface that instead of claiming success
+        match app.run("develop.copy", json!({})) {
+            Ok(_) => app.toast(ui.ctx(), "Edit settings copied"),
+            Err(e) => app.toast(ui.ctx(), e),
+        }
     }
     let paste_r = Rect::from_min_size(pos2(copy_r.right() + 6.0, pill.top()), vec2(PASTE_W, 30.0));
     let presp = ui.interact(paste_r, egui::Id::new("paste-settings"), Sense::click());
