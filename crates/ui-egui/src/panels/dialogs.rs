@@ -54,9 +54,6 @@ pub(crate) fn rename_preview(
     (read(&rows), total)
 }
 
-/// Help ▸ What's New (docs/whats-new.md).
-pub const WHATS_NEW: &str = include_str!("../../../../docs/whats-new.md");
-
 pub fn show(app: &mut LightcraftApp, ctx: &egui::Context) {
     let Some(mut dlg) = app.ui.dialog.clone() else { return };
     let t = Tokens::get(ctx);
@@ -82,7 +79,6 @@ pub fn show(app: &mut LightcraftApp, ctx: &egui::Context) {
         Dialog::NewSmartAlbum { .. } => "Create Smart Album",
         Dialog::AllMetadata { .. } => "All Metadata",
         Dialog::SystemInfo { .. } => "System Info",
-        Dialog::WhatsNew => "What's New",
         Dialog::Cull { .. } => "Assisted Culling",
         Dialog::SmartRules { id: None, .. } => "New Smart Album",
         Dialog::SmartRules { .. } => "Edit Smart Album",
@@ -140,25 +136,6 @@ pub fn show(app: &mut LightcraftApp, ctx: &egui::Context) {
                     let r = ui.checkbox(pick_best, crate::i18n::tr("Pick the sharpest photo of each burst"));
                     crate::widgets::register(ui.ctx(), "check:cullPick", r.rect);
                     ui.label(egui::RichText::new(crate::i18n::tr("Scores stay on the photos: filter or make smart albums with Focus and Best of Similar Shots.")).color(t.text_dim));
-                }
-                Dialog::WhatsNew => {
-                    egui::ScrollArea::vertical().max_height(460.0).auto_shrink([false, true]).show(ui, |ui| {
-                        for line in WHATS_NEW.lines() {
-                            let l = line.trim_end();
-                            if let Some(h) = l.strip_prefix("### ") {
-                                ui.add_space(6.0);
-                                ui.label(egui::RichText::new(h).font(t.semibold(12.5)).color(t.text));
-                            } else if let Some(h) = l.strip_prefix("## ") {
-                                ui.add_space(8.0);
-                                ui.label(egui::RichText::new(h).font(t.semibold(14.0)).color(t.text));
-                            } else if l.starts_with("# ") || l.is_empty() {
-                            } else if let Some(b) = l.strip_prefix("- ") {
-                                ui.label(egui::RichText::new(format!("•  {}", b.replace('`', ""))).color(t.text_label));
-                            } else {
-                                ui.label(egui::RichText::new(l.trim().replace('`', "")).color(t.text_label));
-                            }
-                        }
-                    });
                 }
                 Dialog::SystemInfo { rows } => {
                     egui::Grid::new("sysinfo").num_columns(2).spacing([16.0, 4.0]).striped(true).show(ui, |ui| {
@@ -967,7 +944,7 @@ pub fn confirm_dialog(app: &mut LightcraftApp, dlg: &Dialog) -> Result<serde_jso
         Dialog::RenameKeyword { from, to } => app.run("keyword.rename", json!({"from": from, "to": to})),
         Dialog::MergeKeywords { from, into } => app.run("keyword.merge", json!({"from": from, "into": into})),
         Dialog::AutoStack { gap } => app.run("stack.auto", json!({"gap": gap})),
-        Dialog::AllMetadata { .. } | Dialog::SystemInfo { .. } | Dialog::WhatsNew => Ok(serde_json::Value::Null),
+        Dialog::AllMetadata { .. } | Dialog::SystemInfo { .. } => Ok(serde_json::Value::Null),
         Dialog::Cull { reject_below, pick_best } => {
             let mut p = json!({"pickBest": pick_best});
             if *reject_below > 0.0 {

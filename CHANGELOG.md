@@ -2,6 +2,12 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.1.7
+
+- **HELP MENU, TRIMMED**: every item that linked to the upstream LightCraft/ArtCraft project is **GONE** — the Help docs, ArtCraft Discord, Send Feedback, both Website links and the upstream GitHub link; the old **What's New** (upstream release notes) is gone too. The Help menu now holds only **About**, **Check for Updates**, **System Info** and **Keyboard Shortcuts**. This build's own release notes live in the update prompt and on GitHub Releases, as before.
+
+— **tonynehihi**
+
 ## 1.1.6
 
 - **MACOS-STYLE ICON**: the LrT icon now uses the standard macOS squircle shape with proper padding — no more full-bleed square on the Dock.

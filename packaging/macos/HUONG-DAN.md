@@ -6,6 +6,11 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 - Giao diện **sáng/tối**: vào Settings (⌘,) → Interface → Theme
 - Icon **LrT** phong cách Adobe, tên app "Lightroom by Tony"
 
+## Mới ở bản 1.1.7 — dọn menu Help, bỏ hết link về LightCraft gốc
+
+- Menu **Help** giờ chỉ còn 4 mục: **About Lightroom by Tony**, **Check for Updates**, **System Info**, **Keyboard Shortcuts**.
+- Đã xóa toàn bộ mục dẫn về dự án gốc: mục Help (tài liệu của bản gốc), Join the ArtCraft Discord, Send Feedback, Lightroom by Tony Website, Lightroom by Tony on GitHub (mục này trỏ về repo gốc storytold/lightcraft chứ không phải repo của Tony), ArtCraft Website, và **What's New** (nội dung là changelog của bản gốc). Changelog của bản này vẫn nằm ở pop-up update và trang GitHub Releases của Tony như cũ.
+
 ## Mới ở bản 1.1.6 — HEIC, pop-up file mất, hỏi update khi mở app
 
 - **Icon chuẩn macOS**: icon LrT bo góc squircle + đệm trong suốt đúng lưới icon macOS, hết vuông full viền trên Dock.

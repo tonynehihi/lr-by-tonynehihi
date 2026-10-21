@@ -463,8 +463,6 @@ pub enum Dialog {
     NewSmartAlbum {
         name: String,
     },
-    /// Help ▸ What's New.
-    WhatsNew,
     /// Photo ▸ Assisted Culling: reject photos below this focus score (0 = none), pick the best
     /// of each burst.
     Cull {

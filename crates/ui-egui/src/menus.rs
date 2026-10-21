@@ -160,14 +160,7 @@ pub const UI_COMMANDS: &[UiCommand] = &[
     ("app.about", "About Lightroom by Tony", None, "Help"),
     ("app.checkUpdates", "Check for Updates", None, "Help"),
     ("app.systemInfo", "System Info…", None, "Help"),
-    ("app.whatsNew", "What's New", None, "Help"),
     ("dialog.cull", "Assisted Culling…", None, "Photo"),
-    ("app.help", "Lightroom by Tony Help", Some("F1"), "Help"),
-    ("app.discord", "Join the ArtCraft Discord…", None, "Help"),
-    ("app.feedback", "Send Feedback…", None, "Help"),
-    ("app.website", "Lightroom by Tony Website", None, "Help"),
-    ("app.github", "Lightroom by Tony on GitHub", None, "Help"),
-    ("app.artcraft", "ArtCraft Website", None, "Help"),
     ("app.shortcuts", "Keyboard Shortcuts", Some("Cmd+/"), "Help"),
     ("app.export", "Export Now", None, ""),
     ("app.showInFinder", "Show in Finder", Some("Cmd+R"), "Photo"),
@@ -905,10 +898,6 @@ pub fn run_ui_command(app: &mut LightcraftApp, id: &str, p: &Value) -> Option<Re
             app.ui.dialog = Some(Dialog::Cull { reject_below: 0.0, pick_best: true });
             Ok(Value::Null)
         }
-        "app.whatsNew" => {
-            app.ui.dialog = Some(Dialog::WhatsNew);
-            Ok(json!({"text": crate::panels::dialogs::WHATS_NEW}))
-        }
         "app.systemInfo" => {
             let info = app.session.execute("library.info", &json!({})).unwrap_or_default();
             let gpu = (lightcraft_engine::gpu::ready() && lightcraft_engine::gpu::available()).then(lightcraft_engine::gpu::adapter_name).flatten();
@@ -1244,10 +1233,6 @@ pub fn run_ui_command(app: &mut LightcraftApp, id: &str, p: &Value) -> Option<Re
         }
         "app.export" => crate::control::export_active(app, p),
         "app.showInFinder" => show_in_finder(app),
-        "app.discord" | "app.website" | "app.github" | "app.artcraft" | "app.help" | "app.feedback" => {
-            let url = crate::links::url_of(id).unwrap_or(crate::links::WEBSITE);
-            crate::links::open(app, url)
-        }
         "app.exportPrevious" => match app.session.last_export.clone() {
             Some(prev) => crate::control::export_active(app, &prev),
             None => Err("nothing exported yet — use Export…".into()),
