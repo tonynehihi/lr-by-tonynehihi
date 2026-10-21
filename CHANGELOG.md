@@ -2,6 +2,12 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.1.8
+
+- **UPDATE PROGRESS, LIVE IN THE APP**: installing an update no longer goes silent in the background. The new version now **BUILDS INSIDE THE APP** with live progress — current step, crates compiled, elapsed time, plus a **Cancel Build** button — while your current version stays open and untouched. The app closes **only for a few seconds** at the end to swap versions, then reopens by itself; during the swap the old version is moved out of Applications first, so it **can't be launched mid-update** from Spotlight. If the build fails, nothing was changed and you keep using the current version. (Installing this version itself still uses the previous flow — the new flow applies from the next update onward.)
+
+— **tonynehihi**
+
 ## 1.1.7
 
 - **HELP MENU, TRIMMED**: every item that linked to the upstream LightCraft/ArtCraft project is **GONE** — the Help docs, ArtCraft Discord, Send Feedback, both Website links and the upstream GitHub link; the old **What's New** (upstream release notes) is gone too. The Help menu now holds only **About**, **Check for Updates**, **System Info** and **Keyboard Shortcuts**. This build's own release notes live in the update prompt and on GitHub Releases, as before.

@@ -6,6 +6,13 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 - Giao diện **sáng/tối**: vào Settings (⌘,) → Interface → Theme
 - Icon **LrT** phong cách Adobe, tên app "Lightroom by Tony"
 
+## Mới ở bản 1.1.8 — update hiện tiến trình ngay trong app
+
+- Bấm **Install Update**: app **không thoát nữa** — nó tự build bản mới ngay trong app và hiện tiến trình trực tiếp: đang ở bước nào (giải nén / build / đóng gói), đã compile bao nhiêu crate, đã chạy bao lâu. Có nút **Cancel Build** để hủy giữa chừng.
+- Build xong app báo bản mới đã sẵn sàng → bấm **Finish Install**: app mới thoát, và chỉ thoát **vài giây** để tráo bản mới vào /Applications rồi tự mở lại. Lúc tráo, bản cũ được dời vào thư mục backup (`~/Library/Caches/Lightroom by Tony/updates/backup`) trước, nên **không mở được bản cũ bằng Spotlight giữa chừng** nữa; tráo lỗi thì bản cũ được khôi phục và mở lại.
+- Build lỗi giữa chừng: bản đang dùng **không bị đụng vào**, app báo lỗi kèm đường dẫn build log để xem.
+- Lưu ý: bản 1.1.8 này cài vào vẫn theo flow cũ (thoát rồi chạy ngầm), vì flow mới nằm trong chính bản 1.1.8 — từ lần update **sau** mới thấy tiến trình.
+
 ## Mới ở bản 1.1.7 — dọn menu Help, bỏ hết link về LightCraft gốc
 
 - Menu **Help** giờ chỉ còn 4 mục: **About Lightroom by Tony**, **Check for Updates**, **System Info**, **Keyboard Shortcuts**.
