@@ -105,20 +105,28 @@ fn centre(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, from: f32, to:
         return;
     }
     let has_clip = app.session.clipboard.is_some();
+    // when the selected photos' settings differ there is no single settings set to
+    // copy: the button greys out and stops responding instead of failing on click
+    // (the engine still refuses the command itself, for the other callers)
+    let copy_blocked = app.session.copy_is_ambiguous(&json!({}));
+    let copy_enabled = active.is_some() && !copy_blocked;
     let copy_r = Rect::from_min_size(pos2(pill.right() + 10.0, pill.top()), vec2(COPY_W, 30.0));
-    let cresp = ui.interact(copy_r, egui::Id::new("copy-settings"), Sense::click());
+    let cresp = ui.interact(copy_r, egui::Id::new("copy-settings"), if copy_enabled { Sense::click() } else { Sense::hover() });
     register(ui.ctx(), "button:copySettings", copy_r);
-    ui.painter().rect_filled(copy_r, 15.0, if cresp.hovered() && active.is_some() { t.hover } else { t.canvas });
+    ui.painter().rect_filled(copy_r, 15.0, if cresp.hovered() && copy_enabled { t.hover } else { t.canvas });
     ui.painter().text(
         copy_r.center(),
         Align2::CENTER_CENTER,
         crate::i18n::tr("Copy Settings"),
         t.font(13.0),
-        if active.is_some() { t.text_label } else { t.text_disabled },
+        if copy_enabled { t.text_label } else { t.text_disabled },
     );
-    if cresp.clicked() && active.is_some() {
-        // the engine refuses to copy when the selected photos' settings differ;
-        // surface that instead of claiming success
+    let cresp = if copy_blocked {
+        cresp.on_hover_text(crate::i18n::tr("The selected photos have different edit settings — select a single photo to copy its settings"))
+    } else {
+        cresp
+    };
+    if cresp.clicked() && copy_enabled {
         match app.run("develop.copy", json!({})) {
             Ok(_) => app.toast(ui.ctx(), "Edit settings copied"),
             Err(e) => app.toast(ui.ctx(), e),

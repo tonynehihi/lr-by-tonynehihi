@@ -684,6 +684,26 @@ impl Session {
         }
         if self.selection.ids.is_empty() { self.selection.active.into_iter().collect() } else { self.selection.ids.clone() }
     }
+
+    /// True when copying edit settings from the targets of `p` would be ambiguous:
+    /// several photos are targeted and the settings that would be copied (the copy
+    /// groups) are not the same for all of them. `develop.copy` refuses in that
+    /// case; the app greys its Copy Settings button out on the same answer, so the
+    /// refusal is visible before the click instead of after it.
+    pub fn copy_is_ambiguous(&self, p: &Value) -> bool {
+        let targets = self.targets(p);
+        if targets.len() <= 1 {
+            return false;
+        }
+        let mut partials = targets
+            .iter()
+            .filter_map(|t| self.develop_of(*t))
+            .map(|d| lightcraft_develop::extract_groups(&d, &self.copy_groups));
+        match partials.next() {
+            Some(first) => partials.any(|other| other != first),
+            None => false,
+        }
+    }
 }
 
 /// Automatic versions kept per photo.

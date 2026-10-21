@@ -6,6 +6,13 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 - Giao diện **sáng/tối**: vào Settings (⌘,) → Interface → Theme
 - Icon **LrT** phong cách Adobe, tên app "Lightroom by Tony"
 
+## Mới ở bản 1.1.9 — nút Copy tự xám + locate theo folder
+
+- **Nút Copy Settings tự xám khi không copy được**: chọn nhiều ảnh có settings khác nhau → nút chuyển xám, không bấm được, rê chuột lên nút có dòng giải thích lý do. Khỏi cảnh bấm vào rồi mới hiện lỗi. Chọn các ảnh có settings giống nhau, hoặc chọn đúng 1 ảnh, là nút sáng lại.
+- **Locate tách thành 2 chức năng** trong pop-up ảnh mất file:
+  - **Locate File...**: chọn đúng file như cũ (app vẫn kiểm chứng bằng nội dung ảnh, file trùng tên nhưng khác ảnh bị từ chối).
+  - **Locate in Folder...** (mới): chỉ cần chọn **folder** — app tự quét toàn bộ folder (kể cả folder con), tự tìm đúng ảnh bằng nội dung, **file có bị đổi tên vẫn tìm ra**, tìm thấy là tự link lại luôn. Nếu có nhiều file trông giống nhau mà không phân biệt được, app sẽ báo để bạn tự chọn bằng Locate File.
+
 ## Mới ở bản 1.1.8 — update hiện tiến trình ngay trong app
 
 - Bấm **Install Update**: app **không thoát nữa** — nó tự build bản mới ngay trong app và hiện tiến trình trực tiếp: đang ở bước nào (giải nén / build / đóng gói), đã compile bao nhiêu crate, đã chạy bao lâu. Có nút **Cancel Build** để hủy giữa chừng.

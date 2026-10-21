@@ -582,20 +582,11 @@ pub fn specs() -> Vec<CommandSpec> {
                 // all share the same settings: refuse rather than silently take the
                 // active photo's settings and let the user guess what was copied.
                 // Compared on the extracted groups — what would actually be copied.
-                let targets = s.targets(p);
-                if targets.len() > 1 {
-                    let mut partials = targets
-                        .iter()
-                        .filter_map(|t| s.develop_of(*t))
-                        .map(|d| lightcraft_develop::extract_groups(&d, &s.copy_groups));
-                    if let Some(first) = partials.next() {
-                        if partials.any(|other| other != first) {
-                            return Err(bad(
-                                "develop.copy",
-                                "The selected photos have different edit settings — select a single photo to copy its settings",
-                            ));
-                        }
-                    }
+                if s.copy_is_ambiguous(p) {
+                    return Err(bad(
+                        "develop.copy",
+                        "The selected photos have different edit settings — select a single photo to copy its settings",
+                    ));
                 }
                 let d = s.develop_of(id).unwrap_or_default();
                 s.clipboard = Some(lightcraft_develop::extract_groups(&d, &s.copy_groups));

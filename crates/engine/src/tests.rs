@@ -120,6 +120,22 @@ fn copy_refused_when_selected_settings_differ() {
 }
 
 #[test]
+fn copy_is_ambiguous_follows_the_selection() {
+    // the app greys the Copy Settings button out on this answer, so it must
+    // track exactly when develop.copy would refuse
+    let mut s = demo();
+    let vis = s.visible_cloned();
+    assert!(!s.copy_is_ambiguous(&json!({})), "a single photo is never ambiguous");
+    s.execute("develop.set", &json!({"values": {"light.exposure": 1.0}})).unwrap();
+    s.execute("library.select", &json!({"ids": [vis[0].0, vis[1].0]})).unwrap();
+    assert!(s.copy_is_ambiguous(&json!({})), "edited + untouched photos differ");
+    s.execute("library.select", &json!({"ids": [vis[1].0, vis[2].0]})).unwrap();
+    assert!(!s.copy_is_ambiguous(&json!({})), "two untouched photos agree");
+    s.execute("library.select", &json!({"ids": [vis[0].0]})).unwrap();
+    assert!(!s.copy_is_ambiguous(&json!({})), "back to one photo");
+}
+
+#[test]
 fn albums_crud() {
     let mut s = demo();
     let f = s.execute("album.create", &json!({"name": "Trips", "folder": true})).unwrap()["id"].as_u64().unwrap();

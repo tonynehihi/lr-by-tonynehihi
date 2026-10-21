@@ -2,6 +2,13 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.1.9
+
+- **COPY SETTINGS NOW GREYS OUT**: when several selected photos have **different edit settings**, the Copy Settings button is **greyed out and unclickable** — hover it for the reason — instead of failing with a message after the click. Select photos that share the same settings, or a single photo, and it lights up again.
+- **LOCATE IN FOLDER**: the missing-photo prompt now offers **two separate ways** to relink. **Locate File...** picks the exact file (still verified by content, so a same-name look-alike is refused). **Locate in Folder...** takes just a **folder** and **searches it recursively**, matching by **content** — the photo is found and relinked automatically **even if the file was renamed**.
+
+— **tonynehihi**
+
 ## 1.1.8
 
 - **UPDATE PROGRESS, LIVE IN THE APP**: installing an update no longer goes silent in the background. The new version now **BUILDS INSIDE THE APP** with live progress — current step, crates compiled, elapsed time, plus a **Cancel Build** button — while your current version stays open and untouched. The app closes **only for a few seconds** at the end to swap versions, then reopens by itself; during the swap the old version is moved out of Applications first, so it **can't be launched mid-update** from Spotlight. If the build fails, nothing was changed and you keep using the current version. (Installing this version itself still uses the previous flow — the new flow applies from the next update onward.)
