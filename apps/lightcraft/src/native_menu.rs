@@ -209,10 +209,10 @@ impl NativeMenu {
         self.items.clear();
 
         // the application menu
-        let app_menu = Submenu::new("Lightroom by Tony", true);
-        let about = MenuItem::with_id("app.about", lightcraft_ui_egui::i18n::tr("About Lightroom by Tony"), true, None);
+        let app_menu = Submenu::new("Lightroom by Tonynehihi", true);
+        let about = MenuItem::with_id("app.about", lightcraft_ui_egui::i18n::tr("About Lightroom by Tonynehihi"), true, None);
         let settings = MenuItem::with_id(SETTINGS, lightcraft_ui_egui::i18n::tr("Settings…"), true, accelerator(SETTINGS_KEY));
-        let quit = MenuItem::with_id(QUIT, lightcraft_ui_egui::i18n::tr("Quit Lightroom by Tony"), true, accelerator("Cmd+Q"));
+        let quit = MenuItem::with_id(QUIT, lightcraft_ui_egui::i18n::tr("Quit Lightroom by Tonynehihi"), true, accelerator("Cmd+Q"));
         let _ = app_menu.append_items(&[
             &about,
             &PredefinedMenuItem::separator(),
@@ -220,7 +220,7 @@ impl NativeMenu {
             &PredefinedMenuItem::separator(),
             &PredefinedMenuItem::services(Some(lightcraft_ui_egui::i18n::tr("Services"))),
             &PredefinedMenuItem::separator(),
-            &PredefinedMenuItem::hide(Some(lightcraft_ui_egui::i18n::tr("Hide Lightroom by Tony"))),
+            &PredefinedMenuItem::hide(Some(lightcraft_ui_egui::i18n::tr("Hide Lightroom by Tonynehihi"))),
             &PredefinedMenuItem::hide_others(Some(lightcraft_ui_egui::i18n::tr("Hide Others"))),
             &PredefinedMenuItem::show_all(Some(lightcraft_ui_egui::i18n::tr("Show All"))),
             &PredefinedMenuItem::separator(),
@@ -436,7 +436,7 @@ mod tests {
         set_language(Locale::ZhHant);
         assert_eq!(label_text("File"), "檔案");
         assert_eq!(label_text("Settings…"), "設定…");
-        assert_eq!(label_text("Quit Lightroom by Tony"), "Quit Lightroom by Tony");
+        assert_eq!(label_text("Quit Lightroom by Tonynehihi"), "Quit Lightroom by Tonynehihi");
         set_language(Locale::En);
     }
 

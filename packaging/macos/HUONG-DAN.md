@@ -1,10 +1,17 @@
-# Lightroom by Tony — Hướng dẫn cài đặt sạch & sử dụng
+# Lightroom by Tonynehihi — Hướng dẫn cài đặt sạch & sử dụng
 
 Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã thêm:
 - Export **JPEG Ultra HDR** (có thanh HDR boost 0–4) để đăng Instagram lên HDR — **bản này viết lại gain map theo đúng chuẩn Lightroom** (3 kênh, full-res)
 - **Bấm vào số** bên phải slider để gõ số trực tiếp (Enter = chốt, Esc = hủy)
 - Giao diện **sáng/tối**: vào Settings (⌘,) → Interface → Theme
-- Icon **LrT** phong cách Adobe, tên app "Lightroom by Tony"
+- Icon **LrT** phong cách Adobe, tên app ngoài Spotlight là **"LrT"** (đồng bộ mã với cả bộ app: PsT, AiT, PrT...), trong app là **"Lightroom by Tonynehihi"**
+
+## Mới ở bản 1.2.0 — đổi tên thành "LrT" + changelog hiện đúng chữ đậm
+
+- **Tên app rút gọn còn "LrT"**: ngoài Spotlight / Finder / Dock app chỉ tên là **LrT** — đồng bộ với cả bộ app của Tony (PsT, AiT, PrT, AeT, IdT, AcT); icon vẫn giữ nguyên hình **LrT**. Mở app lên thì bên trong (About, menu...) vẫn là tên đầy đủ **Lightroom by Tonynehihi**. Repo GitHub cũng đổi thành `tonynehihi/lr-by-tonynehihi` — các bản cũ vẫn kiểm tra update được nhờ GitHub tự chuyển hướng.
+- **Changelog trong app hiện đúng định dạng**: chữ đậm trong What's new giờ hiển thị đậm thật như trên GitHub, hết lỗi lòi dấu `**`.
+- **Thư viện và cài đặt giữ nguyên 100%**: bundle id không đổi, thư mục thư viện vẫn là `Lightroom by Tony Library` như cũ — cài bản này xong mở lên là thấy đúng thư viện cũ.
+- ⚠️ **Bản này phải cài TAY một lần**: updater của bản cũ tìm app theo tên cũ nên tự cập nhật sẽ dừng ở bước build (app cũ vẫn nguyên vẹn, không mất gì). Cách cài: tải zip bản 1.2.0 → build như mọi lần (xem mục cài sạch bên dưới) → xóa app cũ **Lightroom by Tony.app** trong /Applications → kéo **LrT.app** vào. Từ bản sau (1.2.1...) update tự động trong app bình thường với tên mới.
 
 ## Mới ở bản 1.1.9 — nút Copy tự xám + locate theo folder
 
@@ -16,14 +23,14 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 ## Mới ở bản 1.1.8 — update hiện tiến trình ngay trong app
 
 - Bấm **Install Update**: app **không thoát nữa** — nó tự build bản mới ngay trong app và hiện tiến trình trực tiếp: đang ở bước nào (giải nén / build / đóng gói), đã compile bao nhiêu crate, đã chạy bao lâu. Có nút **Cancel Build** để hủy giữa chừng.
-- Build xong app báo bản mới đã sẵn sàng → bấm **Finish Install**: app mới thoát, và chỉ thoát **vài giây** để tráo bản mới vào /Applications rồi tự mở lại. Lúc tráo, bản cũ được dời vào thư mục backup (`~/Library/Caches/Lightroom by Tony/updates/backup`) trước, nên **không mở được bản cũ bằng Spotlight giữa chừng** nữa; tráo lỗi thì bản cũ được khôi phục và mở lại.
+- Build xong app báo bản mới đã sẵn sàng → bấm **Finish Install**: app mới thoát, và chỉ thoát **vài giây** để tráo bản mới vào /Applications rồi tự mở lại. Lúc tráo, bản cũ được dời vào thư mục backup (`~/Library/Caches/Lightroom by Tonynehihi/updates/backup`) trước, nên **không mở được bản cũ bằng Spotlight giữa chừng** nữa; tráo lỗi thì bản cũ được khôi phục và mở lại.
 - Build lỗi giữa chừng: bản đang dùng **không bị đụng vào**, app báo lỗi kèm đường dẫn build log để xem.
 - Lưu ý: bản 1.1.8 này cài vào vẫn theo flow cũ (thoát rồi chạy ngầm), vì flow mới nằm trong chính bản 1.1.8 — từ lần update **sau** mới thấy tiến trình.
 
 ## Mới ở bản 1.1.7 — dọn menu Help, bỏ hết link về LightCraft gốc
 
-- Menu **Help** giờ chỉ còn 4 mục: **About Lightroom by Tony**, **Check for Updates**, **System Info**, **Keyboard Shortcuts**.
-- Đã xóa toàn bộ mục dẫn về dự án gốc: mục Help (tài liệu của bản gốc), Join the ArtCraft Discord, Send Feedback, Lightroom by Tony Website, Lightroom by Tony on GitHub (mục này trỏ về repo gốc storytold/lightcraft chứ không phải repo của Tony), ArtCraft Website, và **What's New** (nội dung là changelog của bản gốc). Changelog của bản này vẫn nằm ở pop-up update và trang GitHub Releases của Tony như cũ.
+- Menu **Help** giờ chỉ còn 4 mục: **About Lightroom by Tonynehihi**, **Check for Updates**, **System Info**, **Keyboard Shortcuts**.
+- Đã xóa toàn bộ mục dẫn về dự án gốc: mục Help (tài liệu của bản gốc), Join the ArtCraft Discord, Send Feedback, Lightroom by Tonynehihi Website, Lightroom by Tonynehihi on GitHub (mục này trỏ về repo gốc storytold/lightcraft chứ không phải repo của Tony), ArtCraft Website, và **What's New** (nội dung là changelog của bản gốc). Changelog của bản này vẫn nằm ở pop-up update và trang GitHub Releases của Tony như cũ.
 
 ## Mới ở bản 1.1.6 — HEIC, pop-up file mất, hỏi update khi mở app
 
@@ -35,9 +42,9 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 
 ## Mới ở bản 1.1.5 — tự kiểm tra & cài bản mới (Check for Updates)
 
-- Vào **Help → Check for Updates** (hoặc mở **About Lightroom by Tony**, mục **Updates** ở dưới cùng): app tự hỏi GitHub xem có bản mới hơn không.
+- Vào **Help → Check for Updates** (hoặc mở **About Lightroom by Tonynehihi**, mục **Updates** ở dưới cùng): app tự hỏi GitHub xem có bản mới hơn không.
 - Có bản mới: bấm **Download Update** để tải về, rồi **Quit & Install** — app tự thoát, build bản mới (vài phút, chạy ngầm), thay app trong Applications rồi tự mở lại. **Đây là lần cuối phải cài tay**: từ bản sau (1.1.6...) cứ bấm nút trong app là xong.
-- Nếu cài đặt dở dang có trục trặc: xem log ở `~/Library/Logs/LightroomByTony-update.log`. Build lỗi thì app cũ vẫn nguyên vẹn và tự mở lại, không mất gì.
+- Nếu cài đặt dở dang có trục trặc: xem log ở `~/Library/Logs/LightroomByTonynehihi-update.log`. Build lỗi thì app cũ vẫn nguyên vẹn và tự mở lại, không mất gì.
 - Bản Windows: kiểm tra bản mới trong About được, nhưng chưa tự cài — tải bản mới ở trang release (nút **Open Release Page** trong app).
 
 ## Mới ở bản 1.1.4 — chọn nhiều ảnh + Copy/Paste tách nút
@@ -54,6 +61,7 @@ Bản build cá nhân của Tony, dựa trên LightCraft (MIT/Apache-2.0), đã 
 # Xóa bản build cũ
 rm -rf target/
 # Xóa app đã cài (nếu đã kéo vào Applications)
+rm -rf "/Applications/LrT.app"
 rm -rf "/Applications/Lightroom by Tony.app"
 rm -rf "/Applications/LightCraft.app"
 ```
@@ -82,11 +90,11 @@ Xong thì **đóng Terminal, mở lại**.
 
 ## Build & chạy
 
-**Bước 3** — Giải nén `lightroom-by-tony.zip`.
+**Bước 3** — Giải nén `lr-by-tonynehihi.zip`.
 
 **Bước 4** — Trong Terminal:
 ```bash
-cd <kéo folder lightroom-by-tony vào Terminal rồi thả>
+cd <kéo folder lr-by-tonynehihi vào Terminal rồi thả>
 cargo build --release -p lightcraft
 ```
 (Lần đầu 10–20 phút.)
@@ -101,7 +109,7 @@ cargo build --release -p lightcraft
 packaging/macos/package.sh --arch aarch64
 ```
 (Máy Intel cũ: `--arch x86_64`.)
-Xong mở file `.dmg` trong `dist/release/`, kéo **Lightroom by Tony.app** vào Applications.
+Xong mở file `.dmg` trong `dist/release/`, kéo **LrT.app** vào Applications.
 
 ## Dùng HDR cho Instagram
 
@@ -130,7 +138,7 @@ Chuột phải vào app → chọn **Open** → bấm **Open** trong hộp tho�
 1. Mở Terminal.
 2. Gõ đúng dòng này rồi Enter:
 ```bash
-xattr -cr "/Applications/Lightroom by Tony.app"
+xattr -cr "/Applications/LrT.app"
 ```
 3. Mở app lại bình thường.
 

@@ -39,8 +39,8 @@ export MACOSX_DEPLOYMENT_TARGET=11.0
 IDENTITY="${MACOS_SIGN_IDENTITY:--}"
 SHORT_VERSION="${VERSION%%-*}"
 WORK="$CARGO_TARGET_DIR/macos-package"
-APP="$WORK/Lightroom by Tony.app"
-DMG="$DIST/lightroom-by-tony-$VERSION-macos-$ARCH.dmg"
+APP="$WORK/LrT.app"
+DMG="$DIST/lr-by-tonynehihi-$VERSION-macos-$ARCH.dmg"
 CLI_ZIP="$DIST/lightcraft-cli-$VERSION-macos-$ARCH.zip"
 
 NOTARIZE=0
@@ -52,7 +52,7 @@ else
   warn "macOS: APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID incomplete; signed but not notarized"
 fi
 
-echo "==> Lightroom by Tony $VERSION for macOS ($ARCH), identity: $IDENTITY, notarize: $NOTARIZE"
+echo "==> Lightroom by Tonynehihi $VERSION for macOS ($ARCH), identity: $IDENTITY, notarize: $NOTARIZE"
 
 # ---- build -------------------------------------------------------------------------------------
 if [ "$SKIP_BUILD" = 0 ]; then
@@ -97,11 +97,11 @@ notarize() {
   fi
 }
 
-# ---- Lightroom by Tony.app ----------------------------------------------------------------------------
+# ---- LrT.app ----------------------------------------------------------------------------
 echo "==> assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # Executable and icon carry the display name (CFBundleExecutable / CFBundleIconFile).
-cp "$WORK/bin/lightcraft" "$APP/Contents/MacOS/Lightroom by Tony"
+cp "$WORK/bin/lightcraft" "$APP/Contents/MacOS/LrT"
 # Generate lrt.icns from PNG if missing (needs macOS iconutil)
 if [ ! -f "$ROOT/assets/app-icon/lrt.icns" ]; then
   echo "==> generating lrt.icns from PNG"
@@ -120,7 +120,7 @@ if [ ! -f "$ROOT/assets/app-icon/lrt.icns" ]; then
   iconutil -c icns "$TMPICON/lrt.iconset" -o "$ROOT/assets/app-icon/lrt.icns"
   rm -rf "$TMPICON"
 fi
-cp "$ROOT/assets/app-icon/lrt.icns" "$APP/Contents/Resources/Lightroom by Tony.icns"
+cp "$ROOT/assets/app-icon/lrt.icns" "$APP/Contents/Resources/LrT.icns"
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHORT_VERSION@/$SHORT_VERSION/g" \
   -e "s/@BUILD_SHA@/${LIGHTCRAFT_BUILD_SHA:-unknown}/g" \
   "$HERE/Info.plist.in" >"$APP/Contents/Info.plist"
@@ -132,13 +132,13 @@ copy_docs "$APP/Contents/Resources/Licenses"
 
 # Sign inside-out: nested code first, then the bundle itself (no --deep on the final signature).
 # Today the only nested code is the main executable; frameworks/helpers would be signed here too.
-sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/Lightroom by Tony"
+sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/LrT"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP"
 codesign --verify --strict --deep --verbose=2 "$APP"
 
 if [ "$NOTARIZE" = 1 ]; then
-  ditto -c -k --keepParent "$APP" "$WORK/Lightroom-by-Tony-notarize.zip"
-  notarize "$WORK/Lightroom-by-Tony-notarize.zip"
+  ditto -c -k --keepParent "$APP" "$WORK/LR-by-Tonynehihi-notarize.zip"
+  notarize "$WORK/LR-by-Tonynehihi-notarize.zip"
   xcrun stapler staple "$APP"
   xcrun stapler validate "$APP"
   spctl --assess --type execute -vvv "$APP"
@@ -148,12 +148,12 @@ fi
 echo "==> building $DMG"
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
-ditto "$APP" "$STAGE/Lightroom by Tony.app"
+ditto "$APP" "$STAGE/LrT.app"
 ln -s /Applications "$STAGE/Applications"
 rm -f "$DMG" "$WORK/raw.dmg"
 # makehybrid + convert builds the image without attaching a device, unlike `create -srcfolder`,
 # which is flaky on CI runners ("Resource busy") and hangs in sandboxed sessions.
-hdiutil makehybrid -hfs -hfs-volume-name "Lightroom by Tony $VERSION" -hfs-openfolder "$STAGE" -o "$WORK/raw.dmg" "$STAGE"
+hdiutil makehybrid -hfs -hfs-volume-name "Lightroom by Tonynehihi $VERSION" -hfs-openfolder "$STAGE" -o "$WORK/raw.dmg" "$STAGE"
 hdiutil convert "$WORK/raw.dmg" -format UDZO -imagekey zlib-level=9 -o "$DMG"
 rm -f "$WORK/raw.dmg"
 sign "$DMG"

@@ -1,8 +1,8 @@
 <p align="center">
-  <img alt="Lightroom by Tony" src="assets/app-icon/lrt-icon-1024.png" width="180">
+  <img alt="Lightroom by Tonynehihi" src="assets/app-icon/lrt-icon-1024.png" width="180">
 </p>
 
-<h1 align="center">Lightroom by Tony</h1>
+<h1 align="center">Lightroom by Tonynehihi</h1>
 
 <p align="center">
   <b>A personal fork of <a href="https://github.com/storytold/lightcraft">LightCraft</a> — rebranded and customized by Tony for his own use.</b><br>
@@ -13,13 +13,13 @@
 
 All of the original source code in this project is [LightCraft](https://github.com/storytold/lightcraft) by **storytold** — a photo library and RAW development application written in Rust, released under the **MIT / Apache-2.0** licenses (see `LICENSE-MIT` and `LICENSE-APACHE` in this repo, kept unchanged from the original).
 
-This repository is **not** the official LightCraft and is not a public product release. It is a copy that Tony took, renamed to **Lightroom by Tony**, and adjusted with a few features for his own personal workflow. All credit for the original software belongs to storytold and the LightCraft contributors.
+This repository is **not** the official LightCraft and is not a public product release. It is a copy that Tony took, renamed to **Lightroom by Tonynehihi**, and adjusted with a few features for his own personal workflow. All credit for the original software belongs to storytold and the LightCraft contributors.
 
 > "Lightroom" is a trademark of Adobe. This personal project is not affiliated with or endorsed by Adobe in any way; the name is used only for Tony's private use.
 
 ## What Tony changed
 
-- **Name & identity**: the app is called "Lightroom by Tony", with its own **LrT** icon, About screen and macOS bundle.
+- **Name & identity**: the app is called "Lightroom by Tonynehihi", with its own **LrT** icon, About screen and macOS bundle.
 - **JPEG Ultra HDR export** (a standards-compliant gain map with an HDR boost slider from 0 to 4), so photos posted to Instagram keep true HDR.
 - **Pinch-to-zoom** with a two-finger trackpad gesture in the photo view.
 - **Light/dark interface** (Settings → Interface → Theme).

@@ -2,6 +2,13 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.2.0
+
+- **NEW NAME — "LrT"**: the app is now called **LrT** in Spotlight, Finder and the Dock — the same short-code style as the rest of the suite (PsT, AiT, PrT, AeT, IdT, AcT) — and the icon keeps its **LrT** artwork. Inside the app the full name is **Lightroom by Tonynehihi**. The GitHub repo moved to **tonynehihi/lr-by-tonynehihi** — older versions still find updates through GitHub's redirect. Your library, settings and photos are untouched (same bundle id, same library folder). **One manual install**: the old updater looks for the old bundle name, so this version must be installed by hand once (zip + build, like the early releases); automatic updates work as usual from the next version on.
+- **CHANGELOG RENDERS PROPERLY IN THE APP**: release notes in the update prompt and About now show **bold text as bold**, like on GitHub — no more literal `**` markers.
+
+— **tonynehihi**
+
 ## 1.1.9
 
 - **COPY SETTINGS NOW GREYS OUT**: when several selected photos have **different edit settings**, the Copy Settings button is **greyed out and unclickable** — hover it for the reason — instead of failing with a message after the click. Select photos that share the same settings, or a single photo, and it lights up again.

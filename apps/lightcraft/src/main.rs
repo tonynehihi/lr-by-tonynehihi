@@ -319,7 +319,7 @@ fn services() -> Services {
         save_preset_file: Some(Box::new(|name: &str| {
             rfd::FileDialog::new()
                 .set_title(lightcraft_ui_egui::i18n::tr("Export Presets"))
-                .add_filter(lightcraft_ui_egui::i18n::tr("Lightroom by Tony Preset"), &["lcpreset"])
+                .add_filter(lightcraft_ui_egui::i18n::tr("Lightroom by Tonynehihi Preset"), &["lcpreset"])
                 .set_file_name(name)
                 .save_file()
                 .map(|p| p.to_string_lossy().to_string())
@@ -486,7 +486,7 @@ fn main() -> eframe::Result {
     lightcraft_engine::gpu::set_enabled(gpu_on);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Lightroom by Tony")
+            .with_title("Lightroom by Tonynehihi")
             .with_inner_size([1600.0, 1000.0])
             .with_min_inner_size([900.0, 560.0])
             .with_drag_and_drop(true)

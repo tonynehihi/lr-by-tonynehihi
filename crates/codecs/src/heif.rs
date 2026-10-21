@@ -1,4 +1,4 @@
-//! HEIC/HEIF decoding for the macOS build of this fork ("Lightroom by Tony").
+//! HEIC/HEIF decoding for the macOS build of this fork ("Lightroom by Tonynehihi").
 //!
 //! There is no pure-Rust, permissively licensed HEVC decoder, so on macOS the
 //! operating system's own decoder does the work: the file is staged in a private

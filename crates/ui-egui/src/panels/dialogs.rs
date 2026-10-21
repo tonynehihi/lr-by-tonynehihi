@@ -91,7 +91,7 @@ pub fn show(app: &mut LightcraftApp, ctx: &egui::Context) {
         Dialog::Settings { .. } => "Settings",
         Dialog::ConfirmDelete { .. } => "Delete Photos",
         Dialog::SamModel { .. } => "Download the SAM 3 Model?",
-        Dialog::About => "About Lightroom by Tony",
+        Dialog::About => "About Lightroom by Tonynehihi",
         Dialog::Shortcuts => "Keyboard Shortcuts",
     }
     .to_string();
@@ -698,7 +698,7 @@ pub fn show(app: &mut LightcraftApp, ctx: &egui::Context) {
                 }
                 Dialog::About => {
                     ui.set_min_width(420.0);
-                    ui.label(egui::RichText::new("Lightroom by Tony").font(t.semibold(20.0)).color(t.text));
+                    ui.label(egui::RichText::new("Lightroom by Tonynehihi").font(t.semibold(20.0)).color(t.text));
                     ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new("By Tony").font(t.semibold(15.0)).color(t.text));
@@ -852,7 +852,7 @@ fn sam_model_body(app: &mut LightcraftApp, ui: &mut egui::Ui, error: Option<&str
     }
     let gb = |b: u64| b as f64 / 1e9;
     ui.label(crate::i18n::tr(
-        "Object and Describe masks use SAM 3, Meta's segmentation model. It isn't part of Lightroom by Tony, and everything else works without it.",
+        "Object and Describe masks use SAM 3, Meta's segmentation model. It isn't part of Lightroom by Tonynehihi, and everything else works without it.",
     ));
     let dir = seg.dir.as_ref().map(|d| d.display().to_string()).unwrap_or_default();
     ui.label(format!("{} {:.1} GB, {} {dir}", crate::i18n::tr("A one-time download of about"), gb(MODEL_BYTES), crate::i18n::tr("saved in")));
@@ -860,7 +860,7 @@ fn sam_model_body(app: &mut LightcraftApp, ui: &mut egui::Ui, error: Option<&str
         egui::RichText::new(format!(
             "{} {LICENSE_NAME} — {}",
             crate::i18n::tr("Licence:"),
-            crate::i18n::tr("Meta's terms, not Lightroom by Tony's. Downloading it means accepting them.")
+            crate::i18n::tr("Meta's terms, not Lightroom by Tonynehihi's. Downloading it means accepting them.")
         ))
         .color(t.text_label),
     );

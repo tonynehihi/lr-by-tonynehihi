@@ -7,11 +7,11 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Lightroom by Tony</string>
+  <string>LrT</string>
   <key>CFBundleName</key>
-  <string>Lightroom by Tony</string>
+  <string>LrT</string>
   <key>CFBundleExecutable</key>
-  <string>Lightroom by Tony</string>
+  <string>LrT</string>
   <key>CFBundleIdentifier</key>
   <string>com.tony.lightroom</string>
   <key>CFBundleInfoDictionaryVersion</key>
@@ -29,7 +29,7 @@
   <key>LrTBuildCommit</key>
   <string>@BUILD_SHA@</string>
   <key>CFBundleIconFile</key>
-  <string>Lightroom by Tony</string>
+  <string>LrT</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.graphics-design</string>
   <!-- Must match MACOSX_DEPLOYMENT_TARGET in package.sh. Big Sur is the first release on
@@ -52,14 +52,14 @@
       <key>UTTypeIdentifier</key>
       <string>com.tony.lightroom.document</string>
       <key>UTTypeDescription</key>
-      <string>Lightroom by Tony Document</string>
+      <string>Lightroom by Tonynehihi Document</string>
       <key>UTTypeConformsTo</key>
       <array>
         <string>public.data</string>
         <string>public.image</string>
       </array>
       <key>UTTypeIconFile</key>
-      <string>Lightroom by Tony</string>
+      <string>LrT</string>
       <key>UTTypeTagSpecification</key>
       <dict>
         <key>public.filename-extension</key>

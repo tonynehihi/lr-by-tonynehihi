@@ -149,7 +149,7 @@ pub const UI_COMMANDS: &[UiCommand] = &[
     ("file.restoreLibrary", "Restore Library from Backup…", None, "File"),
     ("photo.locate", "Locate Missing File…", None, ""),
     ("dialog.saveMetadataPreset", "Save Metadata Preset…", None, ""),
-    ("app.quit", "Quit Lightroom by Tony", Some("Cmd+Q"), "File"),
+    ("app.quit", "Quit Lightroom by Tonynehihi", Some("Cmd+Q"), "File"),
     ("file.importPresets", "Import Profiles & Presets…", None, "File"),
     ("file.exportPresets", "Export Presets…", None, "File"),
     // Edit panel ▸ Curve ▸ Point Curve dropdown
@@ -157,7 +157,7 @@ pub const UI_COMMANDS: &[UiCommand] = &[
     ("file.exportCurvePresets", "Export Point Curve Presets…", None, ""),
     ("app.settings", "Settings…", Some("Cmd+,"), "Edit"),
     ("app.openLibrary", "Open Library…", None, "File"),
-    ("app.about", "About Lightroom by Tony", None, "Help"),
+    ("app.about", "About Lightroom by Tonynehihi", None, "Help"),
     ("app.checkUpdates", "Check for Updates", None, "Help"),
     ("app.systemInfo", "System Info…", None, "Help"),
     ("dialog.cull", "Assisted Culling…", None, "Photo"),
@@ -1168,7 +1168,7 @@ pub fn run_ui_command(app: &mut LightcraftApp, id: &str, p: &Value) -> Option<Re
             let path = match p.get("path").and_then(Value::as_str) {
                 Some(x) => Some(x.to_string()),
                 None => {
-                    let name = format!("{}.lcpreset", group.as_deref().unwrap_or("Lightroom by Tony Presets"));
+                    let name = format!("{}.lcpreset", group.as_deref().unwrap_or("Lightroom by Tonynehihi Presets"));
                     match app.services.save_preset_file.as_mut() {
                         Some(f) => f(&name),
                         None => return Some(Err("no file dialog on this platform".into())),

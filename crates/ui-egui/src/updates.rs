@@ -1,6 +1,6 @@
-//! Update check for this personal build ("Lightroom by Tony"): the About dialog and
+//! Update check for this personal build ("Lightroom by Tonynehihi"): the About dialog and
 //! Help ▸ Check for Updates ask GitHub for the newest release of the fork's repo
-//! (`tonynehihi/lightroom-by-tony`, public — no sign-in needed). On macOS the flow is:
+//! (`tonynehihi/lr-by-tonynehihi`, public — no sign-in needed). On macOS the flow is:
 //! download the release's source archive, then **build it inside the app** with
 //! `packaging/macos/package.sh` while the UI shows live progress (the running version
 //! stays untouched, and a failed build changes nothing). Only when the new app is
@@ -21,7 +21,7 @@ use crate::theme::Tokens;
 use crate::LightcraftApp;
 
 /// GitHub API: the newest published release of the fork.
-pub const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/tonynehihi/lightroom-by-tony/releases/latest";
+pub const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/tonynehihi/lr-by-tonynehihi/releases/latest";
 
 /// Largest release JSON accepted (release notes included).
 const MAX_JSON_BYTES: u64 = 1 << 20;
@@ -165,7 +165,7 @@ impl UpdateState {
             self.phase = Phase::Failed(format!("Could not create the update folder: {e}"));
             return;
         }
-        let dest = dir.join(format!("lightroom-by-tony-{}-source.zip", info.version));
+        let dest = dir.join(format!("lr-by-tonynehihi-{}-source.zip", info.version));
         self.cancel.store(false, Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel();
         self.rx = Some(rx);
@@ -372,7 +372,7 @@ fn spawn_swapper(_script: &std::path::Path, _app: &std::path::Path, _version: &s
 }
 
 /// Folder holding downloaded update archives and the updater script:
-/// `~/Library/Caches/Lightroom by Tony/updates` on macOS, `~/.cache/...` elsewhere.
+/// `~/Library/Caches/Lightroom by Tonynehihi/updates` on macOS, `~/.cache/...` elsewhere.
 fn update_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     let mut p = PathBuf::from(home);
@@ -382,7 +382,7 @@ fn update_dir() -> Option<PathBuf> {
     } else {
         p.push(".cache");
     }
-    p.push("Lightroom by Tony");
+    p.push("Lightroom by Tonynehihi");
     p.push("updates");
     Some(p)
 }
@@ -556,7 +556,7 @@ enum BuildOutcome {
 fn step_label(line: &str) -> Option<String> {
     let rest = line.trim().strip_prefix("==> ")?;
     let lower = rest.to_lowercase();
-    let label = if lower.starts_with("lightroom by tony") {
+    let label = if lower.starts_with("lightroom by tonynehihi") {
         "Preparing the build..."
     } else if lower.contains("generating") && lower.contains("icns") {
         "Generating the app icon..."
@@ -715,11 +715,22 @@ fn run_build(zip: &std::path::Path, work: &std::path::Path, cancel: &AtomicBool,
             work.join("build.log").display()
         ));
     }
-    let built = source.join("target").join("macos-package").join("Lightroom by Tony.app");
-    if built.is_dir() {
-        BuildOutcome::Built(built)
-    } else {
-        BuildOutcome::Failed("The build finished but the packaged app was not produced. Your current version was not changed.".to_string())
+    // The packaged bundle in the output folder (found by extension, not by name,
+    // so an app rename can never make the updater look for a stale bundle name).
+    let pkg_dir = source.join("target").join("macos-package");
+    let mut built: Option<PathBuf> = None;
+    if let Ok(entries) = std::fs::read_dir(&pkg_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() && p.extension().is_some_and(|e| e == "app") {
+                built = Some(p);
+                break;
+            }
+        }
+    }
+    match built {
+        Some(app) => BuildOutcome::Built(app),
+        None => BuildOutcome::Failed("The build finished but the packaged app was not produced. Your current version was not changed.".to_string()),
     }
 }
 
@@ -734,21 +745,21 @@ fn run_build(_zip: &std::path::Path, _work: &std::path::Path, _cancel: &AtomicBo
 /// already happened inside the app, so this only waits for the app to quit,
 /// moves the old app out of /Applications into a backup folder (so it cannot be
 /// launched mid-swap), installs the built app and relaunches. Every step logs to
-/// ~/Library/Logs/LightroomByTony-update.log; a failed install restores the old
+/// ~/Library/Logs/LightroomByTonynehihi-update.log; a failed install restores the old
 /// app from the backup and reopens it.
 const SWAP_SCRIPT: &str = r#"#!/bin/sh
 BUILT="$1"
 VER="${2:-unknown}"
 WORK="${3:-}"
-DEST="/Applications/Lightroom by Tony.app"
-CACHE_DIR="$HOME/Library/Caches/Lightroom by Tony/updates"
-BACKUP="$CACHE_DIR/backup/Lightroom by Tony.app"
+DEST="/Applications/LrT.app"
+CACHE_DIR="$HOME/Library/Caches/Lightroom by Tonynehihi/updates"
+BACKUP="$CACHE_DIR/backup/LrT.app"
 LOG_DIR="$HOME/Library/Logs"
-LOG="$LOG_DIR/LightroomByTony-update.log"
+LOG="$LOG_DIR/LightroomByTonynehihi-update.log"
 mkdir -p "$LOG_DIR" "$CACHE_DIR/backup"
 exec >>"$LOG" 2>&1
 echo ""
-echo "=== Installing Lightroom by Tony $VER - $(date) ==="
+echo "=== Installing Lightroom by Tonynehihi $VER - $(date) ==="
 INSTALLED=0
 fail() {
   echo "FAILED: $1"
@@ -760,7 +771,7 @@ fail() {
   exit 1
 }
 i=0
-while pgrep -f "Lightroom by Tony.app/Contents/MacOS" >/dev/null 2>&1; do
+while pgrep -f "/LrT.app/Contents/MacOS/LrT" >/dev/null 2>&1; do
   i=$((i+1))
   if [ "$i" -gt 120 ]; then
     echo "The app was still running after 120s - install postponed, nothing changed."
@@ -810,7 +821,7 @@ pub fn about_section(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             ui.label(format!("Version {} is available - you have {}.", info.version, env!("CARGO_PKG_VERSION")));
             if !info.notes.trim().is_empty() {
                 egui::ScrollArea::vertical().id_salt("update-notes").max_height(90.0).show(ui, |ui| {
-                    ui.label(egui::RichText::new(info.notes.trim()).color(t.text_dim));
+                    notes_ui(ui, info.notes.trim(), &t);
                 });
             }
             ui.horizontal(|ui| {
@@ -875,6 +886,67 @@ pub fn about_section(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     }
 }
 
+fn push_span(spans: &mut Vec<(String, bool)>, text: &str, bold: bool) {
+    if text.is_empty() {
+        return;
+    }
+    if let Some((last, b)) = spans.last_mut() {
+        if *b == bold {
+            last.push_str(text);
+            return;
+        }
+    }
+    spans.push((text.to_string(), bold));
+}
+
+/// Split release notes into (text, bold) spans the way GitHub renders them:
+/// `**bold**` toggles bold, a leading `#`/`##` makes the whole line a bold
+/// heading, backticks are dropped (their text stays, as plain text). A marker
+/// left open runs to the end of its line. Adjacent spans of one kind are merged.
+fn notes_spans(notes: &str) -> Vec<(String, bool)> {
+    let mut spans: Vec<(String, bool)> = Vec::new();
+    for (i, line) in notes.lines().enumerate() {
+        if i > 0 {
+            push_span(&mut spans, "\n", false);
+        }
+        let (text, mut bold) = match line.strip_prefix("## ").or_else(|| line.strip_prefix("# ")) {
+            Some(rest) => (rest, true),
+            None => (line, false),
+        };
+        let mut cur = String::new();
+        let mut chars = text.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '*' && chars.peek() == Some(&'*') {
+                chars.next();
+                push_span(&mut spans, &cur, bold);
+                cur.clear();
+                bold = !bold;
+            } else if c != '`' {
+                cur.push(c);
+            }
+        }
+        push_span(&mut spans, &cur, bold);
+    }
+    spans
+}
+
+/// Show release notes the way GitHub does (see [`notes_spans`]): a plain label
+/// would print the `**` markers literally. Bold spans use the semibold face in
+/// the brighter label color, like the app's other headings.
+fn notes_ui(ui: &mut egui::Ui, notes: &str, t: &Tokens) {
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = ui.available_width();
+    for (text, bold) in notes_spans(notes) {
+        let format = egui::text::TextFormat {
+            font_id: if bold { t.semibold(13.0) } else { t.font(13.0) },
+            color: if bold { t.text_label } else { t.text_dim },
+            ..Default::default()
+        };
+        job.append(&text, 0.0, format);
+    }
+    ui.label(job);
+}
+
 /// Shared progress display for the in-app build (About section + launch prompt):
 /// the current step, how many crates are done, and the elapsed time — the build
 /// is only "done" when it flips to [`Phase::ReadyToInstall`].
@@ -935,7 +1007,7 @@ pub fn prompt_window(app: &mut LightcraftApp, ctx: &egui::Context) {
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("What's new").font(t.semibold(13.0)).color(t.text));
                         egui::ScrollArea::vertical().id_salt("prompt-update-notes").max_height(180.0).show(ui, |ui| {
-                            ui.label(egui::RichText::new(info.notes.trim()).color(t.text_dim));
+                            notes_ui(ui, info.notes.trim(), &t);
                         });
                     }
                     ui.add_space(6.0);
@@ -1046,14 +1118,14 @@ mod tests {
     fn release_json_parses_and_strips_the_v() {
         let json = r#"{
             "tag_name": "v1.2.3",
-            "name": "Lightroom by Tony 1.2.3",
+            "name": "Lightroom by Tonynehihi 1.2.3",
             "body": "What changed.",
-            "html_url": "https://github.com/tonynehihi/lightroom-by-tony/releases/tag/v1.2.3",
-            "zipball_url": "https://api.github.com/repos/tonynehihi/lightroom-by-tony/zipball/v1.2.3"
+            "html_url": "https://github.com/tonynehihi/lr-by-tonynehihi/releases/tag/v1.2.3",
+            "zipball_url": "https://api.github.com/repos/tonynehihi/lr-by-tonynehihi/zipball/v1.2.3"
         }"#;
         let info = parse_release(json).expect("sample release parses");
         assert_eq!(info.version, "1.2.3");
-        assert_eq!(info.name, "Lightroom by Tony 1.2.3");
+        assert_eq!(info.name, "Lightroom by Tonynehihi 1.2.3");
         assert_eq!(info.notes, "What changed.");
         assert!(info.zip_url.ends_with("/zipball/v1.2.3"));
     }
@@ -1076,16 +1148,36 @@ mod tests {
     fn swap_script_only_swaps_and_restores_on_failure() {
         // The build happens in the app now; the script must not build anything.
         assert!(!SWAP_SCRIPT.contains("package.sh"), "swap script must not build");
-        for needle in ["pgrep -f", "/Applications/Lightroom by Tony.app", "mv \"$DEST\" \"$BACKUP\"", "ditto", "open \"$DEST\""] {
+        for needle in ["pgrep -f", "/Applications/LrT.app", "mv \"$DEST\" \"$BACKUP\"", "ditto", "open \"$DEST\""] {
             assert!(SWAP_SCRIPT.contains(needle), "swap script must contain: {needle}");
         }
     }
 
     #[test]
+    fn notes_spans_render_bold_headers_and_code() {
+        let spans = notes_spans("## Lightroom by Tonynehihi 1.2.0\n- **NEW THING**: does `stuff` now\nplain **bold** tail");
+        assert_eq!(
+            spans,
+            vec![
+                ("Lightroom by Tonynehihi 1.2.0".to_string(), true),
+                ("\n- ".to_string(), false),
+                ("NEW THING".to_string(), true),
+                (": does stuff now\nplain ".to_string(), false),
+                ("bold".to_string(), true),
+                (" tail".to_string(), false),
+            ]
+        );
+        // a single star is literal text; an unclosed marker bolds to the line's end
+        assert_eq!(notes_spans("a * b"), vec![("a * b".to_string(), false)]);
+        assert_eq!(notes_spans("x **y"), vec![("x ".to_string(), false), ("y".to_string(), true)]);
+        assert_eq!(notes_spans("just text"), vec![("just text".to_string(), false)]);
+    }
+
+    #[test]
     fn build_output_lines_map_to_steps_and_counts() {
-        assert_eq!(step_label("==> Lightroom by Tony 1.1.8 for macOS (aarch64), identity: -").as_deref(), Some("Preparing the build..."));
-        assert_eq!(step_label("==> assembling /long/path/Lightroom by Tony.app").as_deref(), Some("Assembling the app..."));
-        assert_eq!(step_label("==> building /long/path/lightroom-by-tony-1.1.8-macos-aarch64.dmg").as_deref(), Some("Building the disk image..."));
+        assert_eq!(step_label("==> Lightroom by Tonynehihi 1.1.8 for macOS (aarch64), identity: -").as_deref(), Some("Preparing the build..."));
+        assert_eq!(step_label("==> assembling /long/path/LrT.app").as_deref(), Some("Assembling the app..."));
+        assert_eq!(step_label("==> building /long/path/lr-by-tonynehihi-1.1.8-macos-aarch64.dmg").as_deref(), Some("Building the disk image..."));
         assert_eq!(step_label("==> done").as_deref(), Some("Finishing up..."));
         assert_eq!(step_label("   Compiling egui v0.32.0"), None);
         assert_eq!(step_label("some other line"), None);
