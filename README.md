@@ -5,40 +5,40 @@
 <h1 align="center">Lightroom by Tony</h1>
 
 <p align="center">
-  <b>Bản fork cá nhân của <a href="https://github.com/storytold/lightcraft">LightCraft</a> — chỉnh lại để Tony dùng cho nhu cầu riêng.</b><br>
-  Personal fork of LightCraft by storytold, rebranded and customized for personal use only.
+  <b>A personal fork of <a href="https://github.com/storytold/lightcraft">LightCraft</a> — rebranded and customized by Tony for his own use.</b><br>
+  Not an official release. Personal use only.
 </p>
 
-## Nguồn gốc
+## Origin
 
-Toàn bộ mã nguồn gốc của dự án này là [LightCraft](https://github.com/storytold/lightcraft) của **storytold** — một ứng dụng thư viện ảnh và phát triển ảnh RAW viết bằng Rust, phát hành theo giấy phép **MIT / Apache-2.0** (xem `LICENSE-MIT` và `LICENSE-APACHE` trong repo, giữ nguyên theo bản gốc).
+All of the original source code in this project is [LightCraft](https://github.com/storytold/lightcraft) by **storytold** — a photo library and RAW development application written in Rust, released under the **MIT / Apache-2.0** licenses (see `LICENSE-MIT` and `LICENSE-APACHE` in this repo, kept unchanged from the original).
 
-Repo này **không phải** LightCraft chính thức và cũng không phải một sản phẩm phát hành ra công chúng. Đây chỉ là bản sao Tony lấy về, đổi tên thành **Lightroom by Tony** và chỉnh thêm vài tính năng theo thói quen sử dụng cá nhân. Mọi công lao của phần mềm gốc thuộc về storytold và các cộng tác viên của LightCraft.
+This repository is **not** the official LightCraft and is not a public product release. It is a copy that Tony took, renamed to **Lightroom by Tony**, and adjusted with a few features for his own personal workflow. All credit for the original software belongs to storytold and the LightCraft contributors.
 
-> "Lightroom" là thương hiệu của Adobe. Dự án cá nhân này không có bất kỳ liên quan hay xác nhận nào từ Adobe; tên gọi chỉ để dùng trong phạm vi cá nhân của Tony.
+> "Lightroom" is a trademark of Adobe. This personal project is not affiliated with or endorsed by Adobe in any way; the name is used only for Tony's private use.
 
-## Tony đã chỉnh những gì
+## What Tony changed
 
-- **Đổi tên & nhận diện**: tên app "Lightroom by Tony", icon **LrT**, menu About và bundle macOS riêng.
-- **Export JPEG Ultra HDR** (gain map đúng chuẩn, có thanh HDR boost 0–4) để đăng Instagram nhận HDR thật.
-- **Pinch-to-zoom** bằng trackpad hai ngón trong màn hình xem ảnh.
-- **Giao diện sáng/tối** theo ý thích (Settings → Interface → Theme).
-- **Chọn nhiều ảnh trong filmstrip** (vòng tròn tick, ⌘+click, Shift+click, nút All/None) và **Copy Settings / Paste Settings tách thành 2 nút riêng**; Paste áp cho toàn bộ ảnh đã chọn.
-- **Tự cập nhật trong app** (từ bản 1.1.5): *Help → Check for Updates* — app kiểm tra bản mới nhất ngay tại mục Releases của repo này, tự tải về, build và cài đặt trên macOS.
+- **Name & identity**: the app is called "Lightroom by Tony", with its own **LrT** icon, About screen and macOS bundle.
+- **JPEG Ultra HDR export** (a standards-compliant gain map with an HDR boost slider from 0 to 4), so photos posted to Instagram keep true HDR.
+- **Pinch-to-zoom** with a two-finger trackpad gesture in the photo view.
+- **Light/dark interface** (Settings → Interface → Theme).
+- **Multi-select in the filmstrip** (checkmark circles, ⌘+click, Shift+click, All/None buttons) and **Copy Settings / Paste Settings as two separate buttons**; Paste applies to every selected photo.
+- **Built-in self-update** (since 1.1.5): *Help → Check for Updates* — the app checks the Releases of this repo for the newest version, then downloads, builds and installs it on macOS by itself.
 
-## Cài đặt trên Mac
+## Installing on macOS
 
-Bản Mac là bản source, tự build bằng Cargo trên máy của Tony. Tóm tắt:
+The Mac build is a source build, compiled with Cargo on Tony's own machine. In short:
 
 ```bash
 cargo build --release -p lightcraft
 packaging/macos/package.sh --arch aarch64
 ```
 
-File DMG nằm trong `dist/release/`. Hướng dẫn đầy đủ (cài sạch, gỡ bản cũ, xử lý Gatekeeper) nằm ở `packaging/macos/HUONG-DAN.md`.
+The DMG lands in `dist/release/`. Full instructions (clean install, removing the old build, Gatekeeper troubleshooting) are in `packaging/macos/HUONG-DAN.md` (in Vietnamese).
 
-Từ bản **1.1.5** trở đi không cần làm lại các bước này mỗi lần có bản mới: cứ mở app và bấm **Check for Updates**.
+From **1.1.5** onward there is no need to repeat these steps for each new version: just open the app and click **Check for Updates**.
 
-## Giấy phép
+## License
 
-Giữ nguyên giấy phép của dự án gốc: **MIT OR Apache-2.0**. Các chỉnh sửa của Tony trong repo này cũng được để dưới cùng điều kiện đó, kèm ghi nhận nguồn gốc như trên.
+Kept from the original project: **MIT OR Apache-2.0**. Tony's modifications in this repo are offered under the same terms, with the attribution above.
