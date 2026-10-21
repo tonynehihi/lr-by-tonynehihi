@@ -1,23 +1,20 @@
 # Changelog — Lightroom by Tony
 
-Mọi thay đổi đáng chú ý của bản fork cá nhân này. Cùng nội dung được đăng ở GitHub Releases và hiện trong app khi có bản mới.
+All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
 ## 1.1.6
 
-- **Icon chuẩn macOS**: icon LrT được bo góc squircle và có đệm trong suốt đúng lưới icon macOS — hết cảnh vuông full viền trên Dock.
-- **Đọc được file HEIC** (bản macOS): ảnh .heic từ iPhone import, xem và chỉnh sửa như ảnh thường, nhờ bộ giải mã HEIC có sẵn trong macOS. (Bản Windows chưa đọc được HEIC.)
-- **Ảnh mất file gốc có pop-up**: mở một ảnh để chỉnh mà file gốc đã bị di chuyển hoặc xóa ở ngoài app, app hiện pop-up báo rõ, kèm nút:
-  - **Locate File...** — chọn lại vị trí mới của file; app kiểm chứng đúng ảnh bằng nội dung file (file trùng tên nhưng khác ảnh sẽ bị từ chối, không gắn nhầm).
-  - **Remove from Library** — gỡ hẳn ảnh khỏi thư viện.
-  - **Not Now** — để sau.
-- **Copy Settings hết nhầm lẫn**: chọn nhiều ảnh có settings khác nhau thì không copy được nữa (tránh không biết đang copy settings của ảnh nào). Chọn 1 ảnh, hoặc các ảnh đã chọn có settings giống nhau, thì copy bình thường.
-- **Mở app là hỏi update**: có bản mới thì hiện pop-up kèm mục **What's new** (changelog này) để đọc trước khi quyết; không có bản mới thì không hiện gì cả. Bấm **Later** thì lần mở sau sẽ hỏi lại.
-- Từ bản này, mọi bản mới đều có **changelog** ở GitHub Release và ngay trong app.
+- **macOS-style icon**: the LrT icon now uses the standard macOS squircle shape with proper padding — no more full-bleed square on the Dock.
+- **HEIC support (macOS)**: import, view and edit .heic photos from iPhone like any other photo, using the built-in macOS HEIC decoder. (Not on Windows yet.)
+- **Missing file pop-up**: opening a photo whose original file was moved or deleted shows a pop-up — **Locate File...** to relink it (the file is verified by content, so a different photo with the same name is rejected), **Remove from Library**, or **Not Now**.
+- **No more Copy Settings mix-ups**: copying is refused when the selected photos have different edit settings. A single photo, or photos with identical settings, copy as before.
+- **Update prompt on launch**: if a new version is available, the app asks on startup and shows the release notes before you decide. Nothing pops up when you're up to date; **Later** asks again next launch.
+- From this version on, every release ships with a changelog on GitHub and in the app.
 
 ## 1.1.5
 
-- **Tự kiểm tra & cài bản mới ngay trong app**: Help → Check for Updates (hoặc About → Updates). Có bản mới: Download Update → Quit & Install, app tự build và thay bản cũ trên macOS.
+- **In-app updates**: Help → Check for Updates (or About → Updates). Download Update → Quit & Install — the app builds and replaces itself on macOS.
 
 ## 1.1.4
 
-- Chọn nhiều ảnh trong filmstrip (vòng tròn tick, ⌘+click, Shift+click, nút All/None); Copy Settings / Paste Settings tách thành 2 nút riêng; Paste áp cho toàn bộ ảnh đã chọn; Export theo ảnh đã chọn.
+- Multi-select in the filmstrip (tick circles, ⌘+click, Shift+click, All/None buttons); separate Copy Settings / Paste Settings buttons; Paste applies to all selected photos; export uses the selection.
