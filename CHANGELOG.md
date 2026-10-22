@@ -2,6 +2,14 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.3.0
+
+- **SYNCED WITH UPSTREAM LIGHTCRAFT v0.11.0**: the whole app moves up to upstream 0.11.0 — **LOSSY DNG SUPPORT** (lossy DNG files open natively, including JPEG XL-compressed raws), **SAM 3 WITH CPU FALLBACK** (AI masking works even without a GPU), **DETAIL FIT** rendering, two new interface languages (**Czech** and **Simplified Chinese**), and upstream's fixes and polish since 0.10.
+- **TRACKPAD PINCH IS NOW UPSTREAM'S**: pinch-to-zoom uses upstream's new native implementation — the fork's own pinch handler is retired, one less patch to carry across future syncs.
+- **HELP MENU STAYS THE FORK'S FOUR**: About, Check for Updates, System Info, Keyboard Shortcuts — the merge briefly brought back extra upstream items; they are gone again.
+
+— **tonynehihi**
+
 ## 1.2.0
 
 - **NEW NAME — "LrT"**: the app is now called **LrT** in Spotlight, Finder and the Dock — the same short-code style as the rest of the suite (PsT, AiT, PrT, AeT, IdT, AcT) — and the icon keeps its **LrT** artwork. Inside the app the full name is **Lightroom by Tonynehihi**. The GitHub repo moved to **tonynehihi/lr-by-tonynehihi** — older versions still find updates through GitHub's redirect. Your library, settings and photos are untouched (same bundle id, same library folder). **One manual install**: the old updater looks for the old bundle name, so this version must be installed by hand once (zip + build, like the early releases); automatic updates work as usual from the next version on.

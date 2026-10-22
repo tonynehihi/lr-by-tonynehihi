@@ -13,7 +13,7 @@
   <key>CFBundleExecutable</key>
   <string>LrT</string>
   <key>CFBundleIdentifier</key>
-  <string>com.tony.lightroom</string>
+  <string>ai.storyteller.lightcraft</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundlePackageType</key>
@@ -24,9 +24,9 @@
   <string>@SHORT_VERSION@</string>
   <key>CFBundleVersion</key>
   <string>@SHORT_VERSION@</string>
-  <key>LrTVersion</key>
+  <key>LightCraftVersion</key>
   <string>@VERSION@</string>
-  <key>LrTBuildCommit</key>
+  <key>LightCraftBuildCommit</key>
   <string>@BUILD_SHA@</string>
   <key>CFBundleIconFile</key>
   <string>LrT</string>
@@ -42,69 +42,18 @@
   <true/>
   <key>NSRequiresAquaSystemAppearance</key>
   <false/>
+  <!-- Shown by macOS when LightCraft first asks to control Photos (Export > Add to Apple Photos;
+       needs the apple-events entitlement in entitlements.plist). -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>LightCraft asks Photos to import the photos you export when you choose Add to Apple Photos in the Export dialog.</string>
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright © Tony. Personal build.</string>
+  <string>Copyright © the LightCraft authors. MIT OR Apache-2.0.</string>
 
-  <!-- Lightcraft's own format. -->
-  <key>UTExportedTypeDeclarations</key>
-  <array>
-    <dict>
-      <key>UTTypeIdentifier</key>
-      <string>com.tony.lightroom.document</string>
-      <key>UTTypeDescription</key>
-      <string>Lightroom by Tonynehihi Document</string>
-      <key>UTTypeConformsTo</key>
-      <array>
-        <string>public.data</string>
-        <string>public.image</string>
-      </array>
-      <key>UTTypeIconFile</key>
-      <string>LrT</string>
-      <key>UTTypeTagSpecification</key>
-      <dict>
-        <key>public.filename-extension</key>
-        <array><string>pcraft</string></array>
-        <key>public.mime-type</key>
-        <array><string>application/x-lightcraft</string></array>
-      </dict>
-    </dict>
-  </array>
-  <!-- Types macOS may not know; the system's own declaration wins when it has one. -->
-  <key>UTImportedTypeDeclarations</key>
-  <array>
-    <dict>
-      <key>UTTypeIdentifier</key>
-      <string>com.adobe.photoshop-large-image</string>
-      <key>UTTypeDescription</key>
-      <string>Photoshop Large Document</string>
-      <key>UTTypeConformsTo</key>
-      <array>
-        <string>public.data</string>
-        <string>public.image</string>
-      </array>
-      <key>UTTypeTagSpecification</key>
-      <dict>
-        <key>public.filename-extension</key>
-        <array><string>psb</string></array>
-      </dict>
-    </dict>
-    <dict>
-      <key>UTTypeIdentifier</key>
-      <string>com.tony.lightroom.qoi</string>
-      <key>UTTypeDescription</key>
-      <string>QOI Image</string>
-      <key>UTTypeConformsTo</key>
-      <array>
-        <string>public.data</string>
-        <string>public.image</string>
-      </array>
-      <key>UTTypeTagSpecification</key>
-      <dict>
-        <key>public.filename-extension</key>
-        <array><string>qoi</string></array>
-      </dict>
-    </dict>
-  </array>
+  <!-- No UTI declarations: LightCraft has no document type of its own, and the formats it opens
+       (JPEG, PNG, TIFF, HEIC, the raw formats) are declared by the system or by another app.
+       Declaring PhotoCraft's `.pcraft` type here (and importing PSB and QOI) made Launch Services
+       type PhotoCraft documents as LightCraft's; `.pcraft` ended up with three claimant apps
+       (issue #1951). -->
 
 </dict>
 </plist>

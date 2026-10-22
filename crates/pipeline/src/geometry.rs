@@ -16,7 +16,7 @@ use crate::optics::{Warp, reorient_lens};
 pub const BLANK: [f32; 3] = [0.55, 0.55, 0.55];
 
 /// The geometric frame of a render.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Frame {
     /// Source (EXIF-oriented) dimensions in pixels.
     pub src_w: usize,
@@ -31,6 +31,18 @@ pub struct Frame {
     pub flip_v: bool,
     /// Lens corrections / perspective (None = identity).
     pub warp: Option<Warp>,
+    /// Set when this frame draws only a window of a larger output (see [`Frame::window`]).
+    pub view: Option<ViewWindow>,
+}
+
+/// Where a windowed [`Frame`]'s pixels sit in the full output: its offset and the full output's
+/// size, for effects defined by the whole frame (post-crop vignette).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ViewWindow {
+    pub x: f64,
+    pub y: f64,
+    pub full_w: f64,
+    pub full_h: f64,
 }
 
 impl Frame {
@@ -59,9 +71,11 @@ impl Frame {
             ow,
             oh,
             crop,
-            flip_h: apply_crop && s.crop.flip_h,
-            flip_v: apply_crop && s.crop.flip_v,
+            // a flip is not part of the crop: the crop tool's uncropped view shows it too
+            flip_h: s.crop.flip_h,
+            flip_v: s.crop.flip_v,
             warp: (!warp.is_identity()).then_some(warp),
+            view: None,
         };
         if apply_crop && s.geometry.constrain_crop {
             f.constrain_to_image();
@@ -97,6 +111,30 @@ impl Frame {
         self.crop.rect = Rect::from_center(r.center(), r.width() * t, r.height() * t);
     }
 
+    /// Long edge, in pixels, of the whole output this frame draws (its own size unless it is a
+    /// window of a larger one): what size-relative effects (noise reduction, edge refinement)
+    /// must scale with, so a window matches the same pixels of the whole render.
+    pub fn output_long(&self, w: usize, h: usize) -> usize {
+        self.view.map_or(w.max(h), |v| v.full_w.max(v.full_h) as usize)
+    }
+
+    /// This frame narrowed to `win` of its `full_w × full_h` output: the same mapping, but the
+    /// output is only that window (the crop rectangle shrinks to it; flips are as drawn).
+    pub fn window(&self, full_w: usize, full_h: usize, win: crate::PixelWindow) -> Frame {
+        let (fw, fh) = (full_w.max(1) as f64, full_h.max(1) as f64);
+        let (x0, x1) = (win.x as f64 / fw, (win.x + win.w) as f64 / fw);
+        let (y0, y1) = (win.y as f64 / fh, (win.y + win.h) as f64 / fh);
+        // flips happen on the output before it maps onto the crop: undo them for the range
+        let (x0, x1) = if self.flip_h { (1.0 - x1, 1.0 - x0) } else { (x0, x1) };
+        let (y0, y1) = if self.flip_v { (1.0 - y1, 1.0 - y0) } else { (y0, y1) };
+        let r = self.crop.rect;
+        let (rw, rh) = (r.width(), r.height());
+        let mut f = self.clone();
+        f.crop.rect = Rect { x0: r.x0 + x0 * rw, y0: r.y0 + y0 * rh, x1: r.x0 + x1 * rw, y1: r.y0 + y1 * rh };
+        f.view = Some(ViewWindow { x: win.x as f64, y: win.y as f64, full_w: fw, full_h: fh });
+        f
+    }
+
     /// Add automatically estimated lateral CA (`[α_R, α_B]`, see [`crate::optics::estimate_lateral_ca`]).
     pub fn add_lateral_ca(&mut self, ca: [f64; 2]) {
         if ca == [0.0; 2] {
@@ -129,10 +167,12 @@ impl Frame {
         }
     }
 
-    /// Aspect ratio (w/h) of the output.
+    /// Aspect ratio (w/h) of the output. A crop narrower than a source pixel (or of no size, from
+    /// an agent or a sidecar) counts each side as one pixel, so the aspect stays finite: 0/0 made
+    /// it NaN, and the loupe laid the photo out at a NaN size.
     pub fn aspect(&self) -> f64 {
         let r = self.crop.rect_px(self.ow, self.oh);
-        r.width() / r.height()
+        r.width().max(1.0) / r.height().max(1.0)
     }
 
     /// Size of the (cropped) output at the source's own resolution, in pixels.
@@ -144,6 +184,11 @@ impl Frame {
     pub fn fit(&self, max_w: usize, max_h: usize) -> (usize, usize) {
         let a = self.aspect();
         let (mw, mh) = (max_w.max(1) as f64, max_h.max(1) as f64);
+        // a box that is already this aspect up to rounding (an export size) is the size: fitting
+        // into it again rounds twice and can lose a pixel of the edge that was asked for
+        if (mw - 0.5) / a <= mh + 0.5 && (mw + 0.5) / a >= mh - 0.5 {
+            return (max_w.max(1), max_h.max(1));
+        }
         let (w, h) = if mw / mh > a { (mh * a, mh) } else { (mw, mw / a) };
         ((w.round() as usize).max(1), (h.round() as usize).max(1))
     }
@@ -340,6 +385,25 @@ mod tests {
         assert!((back.x - 50.0).abs() < 1e-6 && (back.y - 50.0).abs() < 1e-6);
     }
 
+    /// A crop of no size (or under a pixel wide) gave a NaN or infinite aspect; each side now
+    /// counts as at least one source pixel.
+    #[test]
+    fn degenerate_crops_have_a_finite_aspect() {
+        let mut s = DevelopSettings::default();
+        for (rect, want) in [
+            (Rect::new(0.5, 0.5, 0.5, 0.5), 1.0),
+            (Rect::new(0.0, 0.0, 1e-9, 1.0), 1.0 / 200.0),
+            (Rect::new(0.0, 0.5, 1.0, 0.5), 400.0),
+            (Rect::new(0.25, 0.0, 0.75, 1.0), 1.0),
+        ] {
+            s.crop.geometry.rect = rect;
+            let f = Frame::new(400, 200, &s, true);
+            assert!((f.aspect() - want).abs() < 1e-9, "{rect:?}: {}", f.aspect());
+            let (w, h) = f.fit(1000, 1000);
+            assert!((1..=1000).contains(&w) && (1..=1000).contains(&h), "{rect:?}: {w}×{h}");
+        }
+    }
+
     #[test]
     fn flip_mirrors() {
         let mut s = DevelopSettings::default();
@@ -349,5 +413,23 @@ mod tests {
         let out = f.sample(&src, 4, 1);
         assert!((out.get(0, 0)[0] - 3.0).abs() < 1e-5);
         assert!((out.get(3, 0)[0] - 0.0).abs() < 1e-5);
+    }
+
+    /// The crop tool's uncropped frame keeps the flips: Flip H / Flip V show while cropping, and
+    /// screen points map back through the mirror (the crop box is drawn and dragged right).
+    #[test]
+    fn uncropped_frame_keeps_the_flips() {
+        let mut s = DevelopSettings::default();
+        s.crop.flip_h = true;
+        s.crop.flip_v = true;
+        s.crop.geometry.rect = Rect::new(0.1, 0.2, 0.6, 0.9);
+        let src = Rgb32f::from_fn(4, 2, |x, y| [x as f32, y as f32, 0.0]);
+        let f = Frame::new(4, 2, &s, false);
+        let out = f.sample(&src, 4, 2);
+        assert!((out.get(0, 0)[0] - 3.0).abs() < 1e-5 && (out.get(0, 0)[1] - 1.0).abs() < 1e-5, "{:?}", out.get(0, 0));
+        assert!((out.get(3, 1)[0] - 0.0).abs() < 1e-5 && (out.get(3, 1)[1] - 0.0).abs() < 1e-5, "{:?}", out.get(3, 1));
+        // the whole image, mirrored: output top-left is the image's bottom-right
+        let p = f.out_to_norm(400, 200).apply(Point::new(0.0, 0.0));
+        assert!((p.x - 1.0).abs() < 1e-9 && (p.y - 1.0).abs() < 1e-9, "{p:?}");
     }
 }

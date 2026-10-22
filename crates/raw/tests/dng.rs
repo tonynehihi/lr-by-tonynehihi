@@ -39,6 +39,7 @@ fn synthetic(w: usize, h: usize, cfa: Option<Cfa>, cpp: usize) -> RawImage {
         ],
         as_shot_neutral: Some([0.5, 1.0, 0.7]),
         baseline_exposure: 0.35,
+        baseline_sharpness: Some(1.5),
         ..Default::default()
     };
     let metadata = lightcraft_meta::Metadata { make: Some("Synth".into()), model: Some("Cam 1".into()), rating: Some(3), ..Default::default() };
@@ -58,8 +59,10 @@ fn synthetic(w: usize, h: usize, cfa: Option<Cfa>, cpp: usize) -> RawImage {
         color,
         wb_multipliers: None,
         linearized: false,
+        pixel_aspect: 1.0,
         opcodes: OpcodeLists::default(),
         metadata,
+        lens_metadata: Default::default(),
     }
 }
 
@@ -84,8 +87,48 @@ fn assert_same(a: &RawImage, b: &RawImage) {
     let (n1, n2) = (a.color.as_shot_neutral.unwrap(), b.color.as_shot_neutral.unwrap());
     assert!((0..3).all(|i| (n1[i] - n2[i]).abs() < 1e-6));
     assert!((a.color.baseline_exposure - b.color.baseline_exposure).abs() < 1e-6);
+    assert!(b.color.baseline_sharpness.is_some_and(|v| (v - 1.5).abs() < 1e-6), "{:?}", b.color.baseline_sharpness);
     assert_eq!(b.metadata.make.as_deref(), Some("Synth"));
     assert_eq!(b.metadata.rating, Some(3));
+}
+
+#[test]
+fn writer_camera_identity_tags_roundtrip() {
+    let cases = [
+        (Some("Canon"), Some("Canon EOS R6"), "Canon EOS R6"),
+        (Some("CANON"), Some("cAnOn EOS R6"), "cAnOn EOS R6"),
+        (Some("Canon"), Some("Canon"), "Canon"),
+        (Some("Canon"), Some("Canon-EOS R6"), "Canon-EOS R6"),
+        (Some("Canon"), Some("Canon_EOS R6"), "Canon Canon_EOS R6"),
+        (Some("Canon"), Some("Canonic R6"), "Canon Canonic R6"),
+        (Some("Canon"), Some("Canon2 R6"), "Canon Canon2 R6"),
+        (Some("Canon"), Some("Canoné R6"), "Canon Canoné R6"),
+        (Some("Canon"), Some("EOS R6"), "Canon EOS R6"),
+        (Some("Eastman Kodak"), Some("eAsTmAn kOdAk DCS Pro"), "eAsTmAn kOdAk DCS Pro"),
+        (Some("Eastman Kodak"), Some("Eastman Kodakish DCS Pro"), "Eastman Kodak Eastman Kodakish DCS Pro"),
+        (Some("Eastman Kodak"), Some("Eastman DCS Pro"), "Eastman Kodak Eastman DCS Pro"),
+        (Some(""), Some("EOS R6"), "EOS R6"),
+        (Some("Canon"), Some(""), "Canon"),
+        (Some(""), Some(""), "LightCraft"),
+        (None, Some("EOS R6"), "EOS R6"),
+        (Some("Canon"), None, "Canon"),
+        (None, None, "LightCraft"),
+    ];
+    for (make, model, unique) in cases {
+        let mut raw = synthetic(16, 16, Some(Cfa::bayer("RGGB").unwrap()), 1);
+        raw.metadata.make = make.map(str::to_owned);
+        raw.metadata.model = model.map(str::to_owned);
+        for order in [ByteOrder::Little, ByteOrder::Big] {
+            let bytes = write_dng(&raw, &DngWriteOptions { compression: DngCompression::Uncompressed, order, xmp: None }).unwrap();
+            let tiff = lightcraft_tiff::Tiff::parse(&bytes).unwrap();
+            let ifd = &tiff.ifds[0];
+            assert_eq!(ifd.value(t::UNIQUE_CAMERA_MODEL), Some(&Value::Ascii(unique.into())), "{make:?} / {model:?}, {order:?}");
+            for (tag, original) in [(t::MAKE, make), (t::MODEL, model)] {
+                let expected = original.filter(|s| !s.is_empty()).map(|s| Value::Ascii(s.into()));
+                assert_eq!(ifd.value(tag), expected.as_ref(), "tag {tag}, {make:?} / {model:?}, {order:?}");
+            }
+        }
+    }
 }
 
 #[test]
@@ -377,6 +420,43 @@ fn floating_point_dngs() {
 }
 
 #[test]
+fn non_finite_float_samples_decode_and_develop() {
+    // regression: NaN samples in a float CFA DNG panicked AHD and PPG (`f32::clamp` with NaN bounds)
+    let (w, h) = (24, 20);
+    let mut raw = synthetic(w, h, Some(Cfa::bayer("RGGB").unwrap()), 1);
+    let mut vals: Vec<f32> = (0..w * h).map(|i| ((i * 37) % 200) as f32 / 256.0).collect();
+    for (i, v) in vals.iter_mut().enumerate() {
+        let (x, y) = (i % w, i / w);
+        if (8..14).contains(&x) && (6..12).contains(&y) {
+            *v = f32::NAN;
+        } else if i % 11 == 0 {
+            *v = if i % 2 == 0 { f32::INFINITY } else { f32::NEG_INFINITY };
+        }
+    }
+    raw.data = RawData::F32(vals.clone());
+    raw.black = BlackLevel::uniform(0.0);
+    raw.white = vec![0.75];
+    for compression in [DngCompression::Uncompressed, DngCompression::Deflate { tile: 16, half: false }] {
+        let bytes = write_dng(&raw, &DngWriteOptions { compression, ..Default::default() }).unwrap();
+        let img = decode(&bytes).unwrap();
+        // NaN and −∞ read as black, +∞ as the white level; finite samples are kept bit-exactly
+        let RawData::F32(got) = &img.data else { panic!("float data expected") };
+        for (a, b) in vals.iter().zip(got) {
+            let want = match *a {
+                f32::INFINITY => 0.75,
+                v if v.is_finite() => v,
+                _ => 0.0,
+            };
+            assert_eq!(want.to_bits(), b.to_bits(), "{a} read as {b}");
+        }
+        for m in [Method::Bilinear, Method::Ppg, Method::Ahd] {
+            let rgb = img.develop(m).unwrap();
+            assert!(rgb.data.iter().all(|p| p.iter().all(|v| v.is_finite())), "{m:?}");
+        }
+    }
+}
+
+#[test]
 fn lj92_strips_and_levels_and_linearization() {
     let (w, h) = (20, 12);
     let px = pattern(w, h, 1, 12);
@@ -547,4 +627,507 @@ fn malformed_profile_look_tags_are_ignored() {
     // and without any of the tags there is nothing to apply
     let plain = decode(&profile_dng(ByteOrder::Little, |_| {})).unwrap();
     assert!(plain.color.profile.is_empty());
+}
+
+/// Lossless JPEG XL codestream of `px` (`w × h × cpp` interleaved), 16-bit unless `eight`.
+fn jxl_encode(px: &[u16], w: usize, h: usize, cpp: usize, eight: bool) -> Vec<u8> {
+    use zune_core::bit_depth::BitDepth;
+    use zune_core::colorspace::ColorSpace;
+    use zune_core::options::EncoderOptions;
+    let cs = if cpp == 1 { ColorSpace::Luma } else { ColorSpace::RGB };
+    let (bytes, depth): (Vec<u8>, _) = if eight {
+        (px.iter().map(|&v| v as u8).collect(), BitDepth::Eight)
+    } else {
+        (px.iter().flat_map(|v| v.to_ne_bytes()).collect(), BitDepth::Sixteen)
+    };
+    let mut out = Vec::new();
+    zune_jpegxl::JxlSimpleEncoder::new(&bytes, EncoderOptions::new(w, h, cs, depth)).encode(&mut out).unwrap();
+    out
+}
+
+/// A bare codestream wrapped in the ISO-BMFF container (signature, `ftyp`, `jxlc`).
+fn jxl_container(cs: &[u8]) -> Vec<u8> {
+    let mut b = vec![0, 0, 0, 0x0c, b'J', b'X', b'L', b' ', 0x0d, 0x0a, 0x87, 0x0a, 0, 0, 0, 0x14];
+    b.extend_from_slice(b"ftypjxl \0\0\0\0jxl ");
+    b.extend_from_slice(&((cs.len() + 8) as u32).to_be_bytes());
+    b.extend_from_slice(b"jxlc");
+    b.extend_from_slice(cs);
+    b
+}
+
+/// A tiled JPEG XL raw IFD of `px`. Edge tiles alternate between being coded at their in-image size
+/// and padded to the nominal tile size (with junk the decoder must drop); tiles alternate between bare
+/// codestreams and containers.
+fn jxl_tiled(px: &[u16], w: usize, h: usize, cpp: usize, bits: u16, cfa: bool, tile: (usize, usize)) -> IfdBuilder {
+    let (tw, th) = tile;
+    let mut tiles = Vec::new();
+    for ty in 0..h.div_ceil(th) {
+        for tx in 0..w.div_ceil(tw) {
+            let i = tiles.len();
+            let (vw, vh) = (tw.min(w - tx * tw), th.min(h - ty * th));
+            let (cw, ch) = if i % 2 == 0 { (tw, th) } else { (vw, vh) };
+            let mut t = vec![bits.min(8) * 7; cw * ch * cpp];
+            for y in 0..vh {
+                for x in 0..vw {
+                    for s in 0..cpp {
+                        t[(y * cw + x) * cpp + s] = px[((ty * th + y) * w + tx * tw + x) * cpp + s];
+                    }
+                }
+            }
+            let cs = jxl_encode(&t, cw, ch, cpp, bits == 8);
+            tiles.push(if i % 3 == 1 { jxl_container(&cs) } else { cs });
+        }
+    }
+    let mut raw = base_ifd(w, h, bits, cpp, cfa);
+    raw.set(t::COMPRESSION, Value::Short(vec![compression::JPEG_XL]));
+    raw.set_image(ImageData::Tiles { tile_width: tw as u32, tile_height: th as u32, tiles });
+    raw
+}
+
+#[test]
+fn jpeg_xl_tiles_decode_bit_exactly() {
+    let (w, h) = (37, 29);
+    // LinearRaw 3 × 16-bit, the full code range
+    let px = pattern(w, h, 3, 16);
+    let bytes = dng(jxl_tiled(&px, w, h, 3, 16, false, (16, 16)), ByteOrder::Big);
+    let img = decode(&bytes).unwrap();
+    assert_eq!((img.width, img.height, img.cpp), (w, h, 3));
+    assert_eq!(img.data, RawData::U16(px));
+    assert_eq!(lightcraft_raw::probe_info(&bytes).unwrap(), img.info());
+    // CFA 1 × 8/12/14-bit
+    for bits in [8u32, 12, 14] {
+        let px = pattern(w, h, 1, bits);
+        let img = decode(&dng(jxl_tiled(&px, w, h, 1, bits as u16, true, (16, 8)), ByteOrder::Little)).unwrap();
+        assert_eq!(img.data, RawData::U16(px), "{bits} bits");
+        assert_eq!(img.white, vec![((1u32 << bits) - 1) as f32]);
+        assert_eq!(img.cfa.unwrap().name(), "GRBG");
+    }
+    // strips: a single JPEG XL strip per 8 rows (the last one shorter)
+    let px = pattern(w, h, 1, 12);
+    let strips = px.chunks(w * 8).map(|c| jxl_encode(c, w, c.len() / w, 1, false)).collect();
+    let mut raw = base_ifd(w, h, 12, 1, true);
+    raw.set(t::COMPRESSION, Value::Short(vec![compression::JPEG_XL]));
+    raw.set_image(ImageData::Strips { rows_per_strip: 8, strips });
+    assert_eq!(decode(&dng(raw, ByteOrder::Big)).unwrap().data, RawData::U16(px));
+}
+
+#[test]
+fn malformed_jpeg_xl_tiles_are_errors() {
+    use lightcraft_raw::RawError;
+    let (w, h) = (16, 16);
+    let px = pattern(w, h, 1, 12);
+    let good = jxl_encode(&px, w, h, 1, false);
+    let one = |tile: Vec<u8>, cpp: usize| {
+        let mut raw = base_ifd(w, h, 12, cpp, cpp == 1);
+        raw.set(t::COMPRESSION, Value::Short(vec![compression::JPEG_XL]));
+        raw.set_image(ImageData::Tiles { tile_width: w as u32, tile_height: h as u32, tiles: vec![tile] });
+        dng(raw, ByteOrder::Little)
+    };
+    // garbage, every truncation, and flipped bytes: errors (or, for a truncation that only drops
+    // trailing padding, the exact samples), never panics
+    let mut garbage = vec![0xff, 0x0a];
+    garbage.extend((0..400u32).map(|i| (i.wrapping_mul(2654435761) >> 13) as u8));
+    assert!(matches!(decode(&one(garbage, 1)), Err(RawError::Corrupt(_))));
+    for n in 0..good.len() {
+        let bytes = one(good[..n].to_vec(), 1);
+        if let Ok(img) = decode(&bytes) {
+            assert_eq!(img.data, RawData::U16(px.clone()), "truncated to {n}");
+        }
+        let _ = lightcraft_raw::probe_info(&bytes);
+    }
+    for i in 0..good.len() {
+        let mut b = good.clone();
+        b[i] ^= 0x5a;
+        let _ = decode(&one(b, 1));
+    }
+    // a tile of the wrong size, or the wrong plane count for the IFD
+    let small = jxl_encode(&px[..w * 8], w, 8, 1, false);
+    assert!(matches!(decode(&one(small, 1)), Err(RawError::Corrupt(_))));
+    assert!(matches!(decode(&one(good.clone(), 3)), Err(RawError::Corrupt(_))));
+    assert!(matches!(lightcraft_raw::probe_info(&one(good, 3)), Err(RawError::Corrupt(_))));
+}
+
+/// One undecodable tile makes the whole image an error: it is never returned with a black tile.
+#[test]
+fn a_jpeg_xl_tile_that_fails_is_an_error_for_the_image() {
+    use lightcraft_raw::RawError;
+    let (w, h) = (32, 16);
+    let px = pattern(w, h, 1, 12);
+    let tile = |x0: usize| -> Vec<u16> { (0..16).flat_map(|y| px[y * w + x0..y * w + x0 + 16].to_vec()).collect() };
+    let two = |second: Vec<u8>| {
+        let mut raw = base_ifd(w, h, 12, 1, true);
+        raw.set(t::COMPRESSION, Value::Short(vec![compression::JPEG_XL]));
+        raw.set_image(ImageData::Tiles { tile_width: 16, tile_height: 16, tiles: vec![jxl_encode(&tile(0), 16, 16, 1, false), second] });
+        dng(raw, ByteOrder::Little)
+    };
+    assert_eq!(decode(&two(jxl_encode(&tile(16), 16, 16, 1, false))).unwrap().data, RawData::U16(px.clone()));
+    // the second tile is cut short; the first one alone is not an image
+    let good = jxl_encode(&tile(16), 16, 16, 1, false);
+    assert!(matches!(decode(&two(good[..good.len() / 2].to_vec())), Err(RawError::Corrupt(_))));
+    assert!(matches!(decode(&two(vec![0xff, 0x0a, 1, 2, 3])), Err(RawError::Corrupt(_))));
+}
+
+/// The decoder's memory is bounded by the tile: a grey tile that also codes an alpha channel needs
+/// about twice what one plane may use, and is an error rather than an allocation the header asks
+/// for. The same samples without the alpha channel decode.
+#[test]
+fn jpeg_xl_tiles_beyond_their_decode_budget_are_errors() {
+    use lightcraft_raw::RawError;
+    use zune_core::bit_depth::BitDepth;
+    use zune_core::colorspace::ColorSpace;
+    use zune_core::options::EncoderOptions;
+    let (w, h) = (512, 512);
+    let grey: Vec<u16> = (0..w * h).map(|i| ((i % w) * 97 + (i / w) * 31) as u16 & 0x0fff).collect();
+    let with_alpha: Vec<u8> = grey.iter().flat_map(|&v| [v, 4095 - v]).flat_map(u16::to_ne_bytes).collect();
+    let mut tile = Vec::new();
+    zune_jpegxl::JxlSimpleEncoder::new(&with_alpha, EncoderOptions::new(w, h, ColorSpace::LumaA, BitDepth::Sixteen)).encode(&mut tile).unwrap();
+    let one = |tile: Vec<u8>| {
+        let mut raw = base_ifd(w, h, 12, 1, true);
+        raw.set(t::COMPRESSION, Value::Short(vec![compression::JPEG_XL]));
+        raw.set_image(ImageData::Tiles { tile_width: w as u32, tile_height: h as u32, tiles: vec![tile] });
+        dng(raw, ByteOrder::Little)
+    };
+    assert!(matches!(decode(&one(tile)), Err(RawError::Corrupt(_))));
+    assert_eq!(decode(&one(jxl_encode(&grey, w, h, 1, false))).unwrap().data, RawData::U16(grey));
+}
+
+#[test]
+fn jpeg_xl_preview_ifd_is_offered() {
+    let raw = synthetic(16, 16, Some(Cfa::bayer("RGGB").unwrap()), 1);
+    let RawData::U16(px) = &raw.data else { unreachable!() };
+    let mut sub = base_ifd(16, 16, 14, 1, true);
+    sub.set(t::COMPRESSION, Value::Short(vec![compression::JPEG_XL]));
+    sub.set_image(ImageData::Tiles { tile_width: 16, tile_height: 16, tiles: vec![jxl_encode(px, 16, 16, 1, false)] });
+    let preview = jxl_container(&jxl_encode(&[200; 4 * 2 * 3], 4, 2, 3, true));
+    let bytes = dng_with(sub, ByteOrder::Big, |ifd0| {
+        ifd0.set(t::COMPRESSION, Value::Short(vec![compression::JPEG_XL]));
+        ifd0.set_image(ImageData::Strips { rows_per_strip: 2, strips: vec![preview.clone()] });
+    });
+    // the rendered RGB preview is offered whole; the (single-tile) CFA raw never is
+    assert_eq!(embedded_preview(&bytes).unwrap(), preview);
+    assert_eq!(decode(&bytes).unwrap().data, raw.data);
+}
+
+/// `ProfileGainTableMap` / `ProfileGainTableMap2` bytes in `order`: a `dims` = (V, H, N) grid with
+/// spacing 0.5 and origin 0.25, green-only input weights, `v2` = (data type, gamma, gain min,
+/// gain max), then `data` (the stored gains, already in `order`).
+fn gain_map_tag(order: ByteOrder, dims: [u32; 3], v2: Option<(u32, f32, f32, f32)>, data: &[u8]) -> Vec<u8> {
+    let be = order == ByteOrder::Big;
+    let u = |v: u32| if be { v.to_be_bytes() } else { v.to_le_bytes() };
+    let mut b = Vec::new();
+    b.extend_from_slice(&u(dims[0]));
+    b.extend_from_slice(&u(dims[1]));
+    for v in [0.5f64, 0.5, 0.25, 0.25] {
+        b.extend_from_slice(&if be { v.to_be_bytes() } else { v.to_le_bytes() });
+    }
+    b.extend_from_slice(&u(dims[2]));
+    for w in [0.0f32, 1.0, 0.0, 0.0, 0.0] {
+        b.extend_from_slice(&u(w.to_bits()));
+    }
+    if let Some((dt, gamma, min, max)) = v2 {
+        for v in [dt, gamma.to_bits(), min.to_bits(), max.to_bits()] {
+            b.extend_from_slice(&u(v));
+        }
+    }
+    b.extend_from_slice(data);
+    b
+}
+
+fn f32_bytes(v: &[f32], order: ByteOrder) -> Vec<u8> {
+    v.iter().flat_map(|f| if order == ByteOrder::Big { f.to_be_bytes() } else { f.to_le_bytes() }).collect()
+}
+
+/// [`profile_dng`] with binary tags in the raw IFD (where Apple writes `ProfileGainTableMap`) and
+/// in IFD 0.
+fn gain_map_dng(order: ByteOrder, raw_tags: &[(u16, &[u8])], ifd0_tags: &[(u16, &[u8])]) -> Vec<u8> {
+    let (w, h) = (8, 6);
+    let px = pattern(w, h, 3, 16);
+    let mut raw = base_ifd(w, h, 16, 3, false);
+    raw.set(t::COMPRESSION, Value::Short(vec![1]));
+    raw.set_image(ImageData::Strips { rows_per_strip: h as u32, strips: vec![u16_bytes(&px, order)] });
+    for (tag, b) in raw_tags {
+        raw.set(*tag, Value::Undefined(b.to_vec()));
+    }
+    dng_with(raw, order, |ifd0| {
+        for (tag, b) in ifd0_tags {
+            ifd0.set(*tag, Value::Undefined(b.to_vec()));
+        }
+    })
+}
+
+#[test]
+fn gain_table_maps_follow_dng_precedence() {
+    const V1: u16 = t::PROFILE_GAIN_TABLE_MAP;
+    const V2: u16 = t::PROFILE_GAIN_TABLE_MAP_2;
+    for order in [ByteOrder::Big, ByteOrder::Little] {
+        let v1 = gain_map_tag(order, [2, 2, 4], None, &f32_bytes(&(1..=16).map(|i| i as f32 * 0.25).collect::<Vec<_>>(), order));
+        // Apple's layout: version 1 in the raw IFD, in the file's byte order
+        let apple = gain_map_dng(order, &[(V1, &v1[..])], &[]);
+        let img = decode(&apple).unwrap();
+        let map = img.color.profile.gain_table_map.clone().expect("gain table map");
+        assert_eq!((map.points_v, map.points_h, map.points_n, map.gamma), (2, 2, 4, 1.0));
+        assert_eq!((map.spacing_v, map.origin_h, map.weights[1]), (0.5, 0.25, 1.0));
+        assert_eq!(map.gains[5], 1.5);
+        assert_eq!(lightcraft_raw::probe_info(&apple).unwrap().color.profile, img.color.profile);
+        // our DNG writer keeps it
+        let again = decode(&write_dng(&img, &DngWriteOptions::default()).unwrap()).unwrap();
+        assert_eq!(again.color.profile.gain_table_map.as_ref(), Some(&map));
+        // version 1 in IFD 0 (where DNG 1.7 says it was meant to go) is read too
+        let in_ifd0 = decode(&gain_map_dng(order, &[], &[(V1, &v1[..])])).unwrap();
+        assert_eq!(in_ifd0.color.profile.gain_table_map.as_ref(), Some(&map));
+        // version 2 in IFD 0 supersedes version 1: 8-bit gains over 0.5..=1.5, gamma 2
+        let v2 = gain_map_tag(order, [1, 1, 2], Some((0, 2.0, 0.5, 1.5)), &[0, 255]);
+        let img = decode(&gain_map_dng(order, &[(V1, &v1[..])], &[(V2, &v2[..])])).unwrap();
+        let map2 = img.color.profile.gain_table_map.clone().unwrap();
+        assert_eq!((map2.points_n, map2.gamma, map2.gains.clone()), (2, 2.0, vec![0.5, 1.5]));
+        // a gamma ≠ 1 survives our writer (as version 2)
+        let again = decode(&write_dng(&img, &DngWriteOptions::default()).unwrap()).unwrap();
+        assert_eq!(again.color.profile.gain_table_map, Some(map2));
+        // a malformed version 2 (gamma outside 0.25..=4) falls back to version 1
+        let bad_v2 = gain_map_tag(order, [1, 1, 2], Some((0, 9.0, 0.5, 1.5)), &[0, 255]);
+        assert_eq!(decode(&gain_map_dng(order, &[(V1, &v1[..])], &[(V2, &bad_v2[..])])).unwrap().color.profile.gain_table_map, Some(map));
+    }
+}
+
+#[test]
+fn malformed_gain_table_maps_are_ignored() {
+    let order = ByteOrder::Little;
+    let ok = gain_map_tag(order, [1, 1, 2], None, &f32_bytes(&[1.0, 2.0], order));
+    let cases: Vec<(&str, Vec<u8>, bool)> = vec![
+        ("valid", ok.clone(), false),
+        ("empty", vec![], false),
+        ("header only", ok[..64].to_vec(), false),
+        ("one byte short", ok[..ok.len() - 1].to_vec(), false),
+        ("NaN gain", gain_map_tag(order, [1, 1, 2], None, &f32_bytes(&[1.0, f32::NAN], order)), false),
+        ("negative gain", gain_map_tag(order, [1, 1, 2], None, &f32_bytes(&[1.0, -2.0], order)), false),
+        ("huge dimensions", gain_map_tag(order, [u32::MAX, u32::MAX, u32::MAX], None, &f32_bytes(&[1.0, 2.0], order)), false),
+        ("zero points", gain_map_tag(order, [1, 0, 2], None, &[]), false),
+        ("unknown data type", gain_map_tag(order, [1, 1, 2], Some((9, 1.0, 0.0, 1.0)), &[0, 0]), true),
+        ("NaN gain range", gain_map_tag(order, [1, 1, 2], Some((0, 1.0, f32::NAN, 1.0)), &[0, 255]), true),
+    ];
+    for (what, bytes, v2) in cases {
+        let tag = if v2 { t::PROFILE_GAIN_TABLE_MAP_2 } else { t::PROFILE_GAIN_TABLE_MAP };
+        let img = decode(&gain_map_dng(order, &[(tag, &bytes[..])], &[])).unwrap_or_else(|e| panic!("{what}: {e}"));
+        assert_eq!(img.color.profile.gain_table_map.is_some(), what == "valid", "{what}");
+    }
+}
+
+/// The map is read in the file's byte order, else big-endian (`lightcraft_raw::gaintable`): a
+/// big-endian payload in a little-endian file is read, a little-endian one in a big-endian file
+/// is not.
+#[test]
+fn gain_table_map_byte_orders() {
+    use ByteOrder::{Big, Little};
+    let payload = |o: ByteOrder| gain_map_tag(o, [1, 1, 2], None, &f32_bytes(&[1.0, 2.0], o));
+    for (file, data, read) in [(Little, Little, true), (Little, Big, true), (Big, Big, true), (Big, Little, false)] {
+        let img = decode(&gain_map_dng(file, &[(t::PROFILE_GAIN_TABLE_MAP, &payload(data)[..])], &[])).unwrap();
+        assert_eq!(img.color.profile.gain_table_map.map(|m| m.gains), read.then(|| vec![1.0, 2.0]), "{data:?} payload, {file:?} file");
+    }
+}
+
+/// A semantic mask IFD (8-bit, uncompressed) named `name`.
+fn mask_ifd(w: usize, h: usize, name: &str, px: Vec<u8>) -> IfdBuilder {
+    let mut m = IfdBuilder::new();
+    m.set(t::NEW_SUBFILE_TYPE, Value::Long(vec![t::SUBFILE_SEMANTIC_MASK]));
+    m.set(t::IMAGE_WIDTH, Value::Long(vec![w as u32]));
+    m.set(t::IMAGE_LENGTH, Value::Long(vec![h as u32]));
+    m.set(t::BITS_PER_SAMPLE, Value::Short(vec![8]));
+    m.set(t::SAMPLES_PER_PIXEL, Value::Short(vec![1]));
+    m.set(t::PHOTOMETRIC, Value::Short(vec![photometric::MASK]));
+    m.set(t::COMPRESSION, Value::Short(vec![1]));
+    if !name.is_empty() {
+        m.set(t::SEMANTIC_NAME, Value::Ascii(name.into()));
+    }
+    m.set_image(ImageData::Strips { rows_per_strip: h as u32, strips: vec![px] });
+    m
+}
+
+/// Semantic masks: a cropped mask is placed by its `MaskSubArea` (zero outside it), mapped onto the
+/// developed image (default crop of the active area), and doesn't disturb the raw decode.
+#[test]
+fn semantic_masks_are_read_and_placed() {
+    use lightcraft_raw::semantic::MaskSubArea;
+    for order in [ByteOrder::Little, ByteOrder::Big] {
+        let bytes = profile_dng(order, |ifd0| {
+            // a 4 × 2 crop at (top 1, left 2) of an 8 × 4 mask over the 8 × 6 image
+            let mut sky = mask_ifd(4, 2, "sky", vec![10, 20, 30, 40, 50, 60, 70, 255]);
+            sky.set(t::MASK_SUB_AREA, Value::Long(vec![1, 2, 8, 4]));
+            ifd0.add_sub_ifd(sky);
+            let mut skin = mask_ifd(2, 2, "skin", vec![0, 255, 255, 0]);
+            skin.set(t::SEMANTIC_INSTANCE_ID, Value::Ascii("person_a".into()));
+            ifd0.add_sub_ifd(skin);
+        });
+        let raw = decode(&bytes).unwrap();
+        assert_eq!((raw.width, raw.height, raw.cpp), (8, 6, 3), "the masks are not the raw image");
+        let masks = lightcraft_raw::semantic_masks(&bytes);
+        assert_eq!(masks.len(), 2);
+        let (sky, skin) = (&masks[0], &masks[1]);
+        assert_eq!((sky.name.as_str(), sky.instance_id.as_deref(), sky.width, sky.height), ("sky", None, 4, 2));
+        assert_eq!(sky.sub_area, Some(MaskSubArea { top: 1, left: 2, full_width: 8, full_height: 4 }));
+        assert_eq!((sky.data[0], sky.data[7]), (10 * 257, 65535));
+        assert_eq!((skin.name.as_str(), skin.instance_id.as_deref(), skin.sub_area), ("skin", Some("person_a"), None));
+        // positions are in uncropped-mask pixels: zero outside the stored crop
+        assert!((sky.value_at(2.5, 1.5) - 10.0 / 255.0).abs() < 1e-4);
+        assert!((sky.value_at(5.5, 2.5) - 1.0).abs() < 1e-4);
+        assert_eq!((sky.value_at(1.5, 1.5), sky.value_at(2.5, 0.5), sky.value_at(6.5, 1.5)), (0.0, 0.0, 0.0));
+        // over the whole image: the uncropped mask's 8 × 4 grid
+        let full = sky.developed(Rect::new(0, 0, 8, 6), Rect::new(0, 0, 8, 6)).unwrap();
+        assert_eq!((full.width, full.height), (8, 4));
+        assert_eq!((full.get(2, 1), full.get(5, 2), full.get(1, 1), full.get(6, 2), full.get(2, 0)), (10, 255, 0, 0, 0));
+        // a default crop keeping columns 2..6 of the image: the stored crop fills it
+        let cropped = sky.developed(Rect::new(0, 0, 8, 6), Rect::new(2, 0, 4, 6)).unwrap();
+        assert_eq!((cropped.width, cropped.height), (4, 4));
+        assert_eq!((cropped.get(0, 1), cropped.get(3, 2), cropped.get(0, 0)), (10, 255, 0));
+    }
+}
+
+/// Malformed semantic masks are skipped (never a panic), and so is the `MaskSubArea` of a mask it
+/// doesn't fit; the raw image still decodes.
+#[test]
+fn malformed_semantic_masks_are_skipped() {
+    let bytes = profile_dng(ByteOrder::Little, |ifd0| {
+        ifd0.add_sub_ifd(mask_ifd(2, 2, "", vec![1, 2, 3, 4])); // no SemanticName
+        let mut rgb = mask_ifd(2, 2, "rgb", vec![0; 12]);
+        rgb.set(t::SAMPLES_PER_PIXEL, Value::Short(vec![3]));
+        rgb.set(t::BITS_PER_SAMPLE, Value::Short(vec![8, 8, 8]));
+        ifd0.add_sub_ifd(rgb);
+        let mut huge = mask_ifd(2, 2, "huge", vec![0; 4]);
+        huge.set(t::IMAGE_WIDTH, Value::Long(vec![100_000]));
+        huge.set(t::IMAGE_LENGTH, Value::Long(vec![100_000]));
+        ifd0.add_sub_ifd(huge);
+        let mut tiny = mask_ifd(2, 2, "tiny data", vec![0; 4]);
+        tiny.set(t::IMAGE_WIDTH, Value::Long(vec![4000]));
+        tiny.set(t::IMAGE_LENGTH, Value::Long(vec![3000]));
+        ifd0.add_sub_ifd(tiny);
+        let mut jxl = mask_ifd(2, 2, "unknown coding", vec![0; 4]);
+        jxl.set(t::COMPRESSION, Value::Short(vec![60_000]));
+        ifd0.add_sub_ifd(jxl);
+        let mut zero = mask_ifd(2, 2, "zero size", vec![0; 4]);
+        zero.set(t::IMAGE_WIDTH, Value::Long(vec![0]));
+        ifd0.add_sub_ifd(zero);
+        let mut short = mask_ifd(4, 4, "short strip", vec![200; 3]);
+        short.set(t::MASK_SUB_AREA, Value::Long(vec![u32::MAX, u32::MAX, u32::MAX, u32::MAX]));
+        ifd0.add_sub_ifd(short);
+        let mut outside = mask_ifd(2, 2, "sub area too small", vec![255; 4]);
+        outside.set(t::MASK_SUB_AREA, Value::Long(vec![3, 0, 2, 4]));
+        ifd0.add_sub_ifd(outside);
+    });
+    assert_eq!(decode(&bytes).unwrap().cpp, 3);
+    let masks = lightcraft_raw::semantic_masks(&bytes);
+    let names: Vec<&str> = masks.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, ["short strip", "sub area too small"]);
+    assert!(masks.iter().all(|m| m.sub_area.is_none()), "sub areas the mask doesn't fit are ignored");
+    for m in &masks {
+        let d = m.developed(Rect::new(0, 0, 8, 6), Rect::new(0, 0, 8, 6)).unwrap();
+        assert_eq!((d.width, d.height), (m.width, m.height));
+        assert!(m.developed(Rect::new(0, 0, 8, 6), Rect::new(8, 6, 0, 0)).is_none());
+    }
+    // not a TIFF at all
+    assert!(lightcraft_raw::semantic_masks(b"not a dng").is_empty());
+}
+
+/// Only the first `MAX_MASKS` mask IFDs are decoded, malformed ones included, so a file full of
+/// mask IFDs costs a bounded number of decodes: here the first `MAX_MASKS` can't be decoded, and
+/// the valid masks after them are never looked at.
+#[test]
+fn semantic_mask_ifds_past_the_cap_are_not_decoded() {
+    use lightcraft_raw::semantic::MAX_MASKS;
+    let with = |undecodable: usize, valid: usize| {
+        profile_dng(ByteOrder::Little, |ifd0| {
+            for i in 0..undecodable {
+                let mut m = mask_ifd(2, 2, &format!("undecodable {i}"), vec![0; 4]);
+                m.set(t::COMPRESSION, Value::Short(vec![60_000]));
+                ifd0.add_sub_ifd(m);
+            }
+            for i in 0..valid {
+                ifd0.add_sub_ifd(mask_ifd(2, 2, &format!("valid {i}"), vec![255; 4]));
+            }
+        })
+    };
+    let bytes = with(MAX_MASKS, 3 * MAX_MASKS);
+    assert_eq!(decode(&bytes).unwrap().cpp, 3);
+    assert!(lightcraft_raw::semantic_masks(&bytes).is_empty());
+    // one fewer undecodable mask leaves room for exactly one valid one
+    let names: Vec<String> = lightcraft_raw::semantic_masks(&with(MAX_MASKS - 1, 3 * MAX_MASKS)).into_iter().map(|m| m.name).collect();
+    assert_eq!(names, ["valid 0"]);
+}
+
+/// `BaselineSharpness` is read from IFD 0; a zero, negative or absurd value is ignored.
+#[test]
+fn baseline_sharpness_is_read_when_plausible() {
+    for (value, want) in [((3, 2), Some(1.5)), ((0, 1), None), ((1, 0), None), ((100, 1), None)] {
+        let bytes = profile_dng(ByteOrder::Big, |ifd0| {
+            ifd0.set(t::BASELINE_SHARPNESS, Value::Rational(vec![value]));
+        });
+        assert_eq!(decode(&bytes).unwrap().color.baseline_sharpness, want, "{value:?}");
+    }
+    let bytes = profile_dng(ByteOrder::Big, |ifd0| {
+        ifd0.set(t::BASELINE_SHARPNESS, Value::SRational(vec![(-1, 1)]));
+    });
+    assert_eq!(decode(&bytes).unwrap().color.baseline_sharpness, None);
+    assert_eq!(decode(&profile_dng(ByteOrder::Big, |_| {})).unwrap().color.baseline_sharpness, None);
+}
+
+/// The DNG CFAPattern is anchored at the top-left of the ActiveArea: a DNG whose area starts on an odd row or
+/// column still demosaics with the pattern the tag states (#1086), and the writer states it back the same way.
+#[test]
+fn cfa_pattern_is_relative_to_the_active_area() {
+    let (w, h) = (20, 12);
+    for (top, left, sensor_name) in [(0u32, 0u32, "GRBG"), (1, 0, "BGGR"), (0, 1, "RGGB"), (1, 1, "GBRG"), (3, 5, "GBRG"), (2, 4, "GRBG")] {
+        let mut raw = base_ifd(w, h, 16, 1, true);
+        raw.set_image(ImageData::Strips { rows_per_strip: h as u32, strips: vec![u16_bytes(&pattern(w, h, 1, 16), ByteOrder::Little)] });
+        raw.set(t::WHITE_LEVEL, Value::Short(vec![65535]));
+        raw.set(t::ACTIVE_AREA, Value::Long(vec![top, left, h as u32 - 1, w as u32 - 1]));
+        let img = decode(&dng(raw, ByteOrder::Little)).unwrap();
+        assert_eq!(img.cfa.as_ref().unwrap().name(), sensor_name, "sensor anchor for area at ({left}, {top})");
+        assert_eq!(img.normalized().unwrap().cfa.unwrap().name(), "GRBG", "tag pattern for area at ({left}, {top})");
+        let back =
+            decode(&write_dng(&img, &DngWriteOptions { compression: DngCompression::Uncompressed, order: ByteOrder::Little, xmp: None }).unwrap())
+                .unwrap();
+        assert_eq!(back.cfa.as_ref().unwrap().name(), sensor_name);
+        assert_eq!(back.normalized().unwrap().cfa.unwrap().name(), "GRBG");
+    }
+}
+
+/// Two samples a pixel are neither one colour nor RGB. A DNG with them decoded, and developing it read a third sample
+/// past each pixel, a panic in release builds too (issue #1511). Such data is refused with a reason, and the demosaic
+/// itself no longer reads past a pixel; one, three and four samples develop as before.
+#[test]
+fn two_samples_per_pixel_are_refused_not_a_panic() {
+    let (w, h) = (8, 6);
+    let file = |cpp: usize| {
+        let mut raw = base_ifd(w, h, 16, cpp, false);
+        raw.set_image(ImageData::Strips { rows_per_strip: h as u32, strips: vec![u16_bytes(&pattern(w, h, cpp, 16), ByteOrder::Little)] });
+        dng(raw, ByteOrder::Little)
+    };
+    let err = decode(&file(2)).unwrap_err();
+    assert!(matches!(err, lightcraft_raw::RawError::Unsupported(ref m) if m.contains("2 samples")), "{err}");
+    for cpp in [1, 3, 4] {
+        decode(&file(cpp)).unwrap().develop(Method::Bilinear).unwrap();
+    }
+    // a raw image built with two samples is refused when it develops
+    let raw = synthetic(16, 12, None, 2);
+    let err = raw.develop(Method::Ahd).unwrap_err();
+    assert!(matches!(err, lightcraft_raw::RawError::Unsupported(_)), "{err}");
+    // the demosaic of such data repeats the last sample instead of reading past the pixel
+    let n = lightcraft_raw::Normalized { width: 2, height: 1, cpp: 2, data: vec![0.1, 0.2, 0.3, 0.4], cfa: None };
+    assert_eq!(lightcraft_raw::demosaic(&n, Method::Ahd).data, vec![[0.1, 0.2, 0.2], [0.3, 0.4, 0.4]]);
+}
+
+/// DNGs LightCraft wrote before the writer anchored the pattern at the ActiveArea carry a bare "LightCraft" Software
+/// tag and a sensor-origin pattern; they keep that reading, while the current writer marks its files differently.
+#[test]
+fn legacy_lightcraft_dng_keeps_the_sensor_anchored_pattern() {
+    let (w, h) = (20, 12);
+    let build = |software: &str| {
+        let mut raw = base_ifd(w, h, 16, 1, true);
+        raw.set_image(ImageData::Strips { rows_per_strip: h as u32, strips: vec![u16_bytes(&pattern(w, h, 1, 16), ByteOrder::Little)] });
+        raw.set(t::WHITE_LEVEL, Value::Short(vec![65535]));
+        raw.set(t::ACTIVE_AREA, Value::Long(vec![1, 0, h as u32 - 1, w as u32 - 1]));
+        raw.set(t::SOFTWARE, Value::Ascii(software.into()));
+        decode(&dng(raw, ByteOrder::Little)).unwrap()
+    };
+    assert_eq!(build("LightCraft").cfa.unwrap().name(), "GRBG");
+    assert_eq!(build("Adobe Photoshop Lightroom").cfa.unwrap().name(), "BGGR");
+    assert_ne!(lightcraft_raw::dngwrite::SOFTWARE, "LightCraft");
 }

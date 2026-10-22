@@ -36,9 +36,14 @@ pub struct WireJob {
     pub raw: bool,
     #[serde(default)]
     pub relative_wb: bool,
+    #[serde(default)]
+    pub legacy_relative_wb: bool,
     pub as_shot_temp: f64,
     pub as_shot_tint: f64,
     pub lens: Option<EmbeddedLens>,
+    /// The original's long edge (`SourceInfo::native_long`).
+    #[serde(default)]
+    pub native_long: Option<usize>,
     pub settings: Arc<DevelopSettings>,
     pub max_w: usize,
     pub max_h: usize,
@@ -53,13 +58,16 @@ pub struct WireJob {
     /// The request's diagnostic overlay (`Overlay::to_parts`).
     #[serde(default)]
     pub overlay: (u8, f64),
+    /// Render only this window `[x, y, w, h]` of the output `max_w × max_h` describes (a zoomed view).
+    #[serde(default)]
+    pub window: Option<[usize; 4]>,
 }
 
 impl WireJob {
     /// `view`: the slot name, for jobs that keep a stage cache.
     pub fn from_job(job: &RenderJob, thumb_cached: bool, view: &str) -> WireJob {
         let max_edge = match &job.source {
-            SourceRef::Demo { max_edge, .. } | SourceRef::File { max_edge, .. } => *max_edge,
+            SourceRef::Demo { max_edge, .. } | SourceRef::File { max_edge, .. } | SourceRef::Fit { max_edge, .. } => *max_edge,
             SourceRef::Loaded(img) => img.image.width.max(img.image.height),
             SourceRef::Smart { .. } => 2560,
         };
@@ -71,9 +79,11 @@ impl WireJob {
             max_edge,
             raw: job.info.raw,
             relative_wb: job.info.relative_wb,
+            legacy_relative_wb: job.info.legacy_relative_wb,
             as_shot_temp: job.info.as_shot_temp,
             as_shot_tint: job.info.as_shot_tint,
             lens: job.info.lens,
+            native_long: job.info.native_long,
             settings: job.settings.clone(),
             max_w: job.request.max_w,
             max_h: job.request.max_h,
@@ -83,6 +93,7 @@ impl WireJob {
             thumb_cached,
             stages: job.stages.is_some().then(|| view.to_string()),
             overlay: job.request.overlay.to_parts(),
+            window: job.request.window.map(|w| [w.x, w.y, w.w, w.h]),
         }
     }
 
@@ -93,6 +104,8 @@ impl WireJob {
             as_shot_tint: self.as_shot_tint,
             lens: self.lens,
             relative_wb: self.relative_wb,
+            legacy_relative_wb: self.legacy_relative_wb,
+            native_long: self.native_long,
             ..Default::default()
         }
     }
@@ -108,6 +121,8 @@ impl WireJob {
             space: lightcraft_engine::pipeline::OutputSpace::Srgb,
             depth: lightcraft_engine::pipeline::OutputDepth::U8,
             proof: None,
+            window: self.window.map(|[x, y, w, h]| lightcraft_engine::pipeline::PixelWindow { x, y, w, h }),
+            display: None,
             hdr_linear: false,
         }
     }
@@ -179,13 +194,18 @@ impl WorkerCore {
             }
         };
         let info = src.info_or(job.info());
-        Ok(match &job.stages {
+        let mut rendered = match &job.stages {
             Some(view) => {
                 let st = self.stages.entry(view.clone()).or_default().clone();
                 lightcraft_engine::pipeline::render_cached(&src.image, &info, &job.settings, &job.request(), &st)
             }
             None => lightcraft_engine::pipeline::render(&src.image, &info, &job.settings, &job.request()),
-        })
+        };
+        // an HDR edit's histogram shows its HDR range (as on native)
+        if let Some(h) = lightcraft_engine::pipeline::hdr_histogram(&src.image, &info, &job.settings, &job.request()) {
+            rendered.histogram = h;
+        }
+        Ok(rendered)
     }
 }
 
@@ -327,10 +347,45 @@ impl CacheWatch {
     }
 }
 
+/// Hands out the positions that render workers will have in the main thread's worker list.
+/// A worker that fails to start gets no position, so the position a callback captures stays the
+/// index of its own worker in that list (#229).
+#[derive(Debug, Default)]
+pub struct WorkerSlots {
+    next: usize,
+}
+
+impl WorkerSlots {
+    /// The position the worker being started will have, if it comes up.
+    pub fn peek(&self) -> usize {
+        self.next
+    }
+
+    /// The worker at [`Self::peek`] came up and was added to the list.
+    pub fn commit(&mut self) {
+        self.next += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use lightcraft_engine::Session;
+
+    // Issue #229: a failed worker attempt must not shift the positions of the workers after it
+    #[test]
+    fn a_failed_worker_attempt_leaves_no_gap_in_the_slots() {
+        let mut slots = WorkerSlots::default();
+        let mut taken = Vec::new();
+        for attempt_ok in [false, true, true, true] {
+            let i = slots.peek();
+            if attempt_ok {
+                taken.push(i);
+                slots.commit();
+            }
+        }
+        assert_eq!(taken, vec![0, 1, 2]);
+    }
 
     #[test]
     fn clearing_index_changes_disk_namespace_and_survives_restart() {
@@ -347,6 +402,40 @@ mod tests {
         assert_eq!(reopened.cache_key(key), new);
         assert!(!reopened.contains(&old));
         assert!(reopened.contains(&new));
+    }
+
+    // Issue #323: a worker given a zoomed view's window renders that window, not the whole frame
+    #[test]
+    fn a_window_job_crosses_the_wire_and_renders_the_same_window() {
+        use lightcraft_engine::pipeline::PixelWindow;
+        let mut s = Session::with_demo();
+        let id = s.visible_cloned()[0];
+        let win = PixelWindow { x: 300, y: 200, w: 160, h: 120 };
+        let job = s.region_job(id, 1920, 1280, win, true).unwrap();
+        let wire = WireJob::from_job(&job, false, "Region");
+        let wire: WireJob = serde_json::from_str(&serde_json::to_string(&wire).unwrap()).unwrap();
+        assert_eq!(wire.request().window, Some(win));
+        let mut core = WorkerCore::default();
+        let a = core.render(&wire, None).unwrap();
+        let b = job.run().rendered.unwrap();
+        assert_eq!((a.image.width, a.image.height), (160, 120));
+        assert_eq!((b.image.width, b.image.height), (160, 120));
+        // the worker renders on the CPU; the engine job uses a GPU when the machine has one, which
+        // stays within docs/gpu-pipeline.md's bound (≤ 3 LSB per channel) rather than bit-exact
+        let max = a.image.data.iter().zip(&b.image.data).flat_map(|(p, q)| (0..3).map(move |c| p[c].abs_diff(q[c]))).max();
+        assert!(max.is_some_and(|m| m <= 3), "max channel difference {max:?}");
+    }
+
+    // a job from before windows existed has none
+    #[test]
+    fn a_job_without_a_window_field_has_no_window() {
+        let mut s = Session::with_demo();
+        let id = s.visible_cloned()[0];
+        let wire = WireJob::from_job(&s.thumb_job(id, 128).unwrap(), false, "Thumb");
+        let mut v = serde_json::to_value(&wire).unwrap();
+        v.as_object_mut().unwrap().remove("window");
+        let old: WireJob = serde_json::from_value(v).unwrap();
+        assert_eq!(old.request().window, None);
     }
 
     #[test]
@@ -382,9 +471,11 @@ mod tests {
             max_edge: 512,
             raw: false,
             relative_wb: false,
+            legacy_relative_wb: false,
             as_shot_temp: 6500.0,
             as_shot_tint: 0.0,
             lens: None,
+            native_long: None,
             settings: Arc::new(DevelopSettings::default()),
             max_w: 32,
             max_h: 32,
@@ -394,6 +485,7 @@ mod tests {
             thumb_cached: false,
             stages: Some("Main".into()),
             overlay: (0, 0.0),
+            window: None,
         };
         let mut core = WorkerCore::default();
         assert_eq!(core.needs_original(&job).as_deref(), Some(hash.as_str()));

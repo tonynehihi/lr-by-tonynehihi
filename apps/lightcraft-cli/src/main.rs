@@ -3,10 +3,11 @@
 //! ```text
 //! lightcraft-cli run [--demo | --library DIR | --connect [ADDR]] [--import PATH]… CMD [key=value…]…
 //! lightcraft-cli mcp [--connect [ADDR]] [--demo] [--compact] [FILES/FOLDERS…]
-//! lightcraft-cli render <in> -o <out> [--set control=value]… [--settings FILE.json] [--preset ID] [--size N] [--quality Q]
+//! lightcraft-cli render <in> -o <out> [--set control=value]… [--settings FILE.json|FILE.lcpreset] [--preset ID] [--size N] [--quality Q]
 //! lightcraft-cli snapshot [--library DIR | --demo] [--script FILE.jsonl] [-o OUT.png] [--size WxH] [--scale S] [FILES…]
-//! lightcraft-cli merge hdr|panorama|hdr-panorama [OPTIONS] FILES…
+//! lightcraft-cli merge hdr|panorama|hdr-panorama|hdr-batch [OPTIONS] FILES…
 //! lightcraft-cli synth-merge hdr|panorama -o DIR
+//! lightcraft-cli denoise-serve [--model ID] [--models DIR] [--listen ADDR] [--token-env VAR] [--run-on auto|gpu|cpu]
 //! lightcraft-cli commands [--json]
 //! lightcraft-cli controls [--json]
 //! lightcraft-cli calibrate [--max N] [--out DIR] FOLDERS/FILES…
@@ -16,7 +17,7 @@
 
 mod alloc_release;
 
-use std::io::{BufReader, Write};
+use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -51,18 +52,21 @@ USAGE:
         --library DIR     headless: open (or create) a persistent LightCraft library; edits are saved
         --compact         list only the helper tools (every command stays reachable via run_command)
   lightcraft-cli render <IN> -o <OUT> [OPTIONS]
-      Develop one file and export it (.jpg, .png, .tif, .webp, .avif or .dng by extension;
+      Develop one file and export it (.jpg, .png, .tif, .webp, .avif, .jxl, .psd or .dng by extension;
       --opt format=ultrahdr for an Ultra HDR gain-map JPEG) with the
       same encoder as the app's Export dialog. Options:
         --set CONTROL=VALUE  set a develop slider, repeatable (e.g. --set light.exposure=0.5)
-        --settings FILE      merge a partial develop-settings JSON file
+        --settings FILE      merge a partial develop-settings JSON file, or apply the one preset of a
+                             .lcpreset (preset.export) or XMP preset
         --preset ID          apply a preset (see `commands`/presets.list)
         --size N             long edge in pixels (default: full size, cropped)
-        --quality Q          JPEG/AVIF quality 1..100 (default 92)
+        --quality Q          JPEG/AVIF/JPEG XL quality 1..100 (default 92)
         --opt KEY=VALUE      any export option of `app.export`, repeatable (VALUE is JSON or a
                              string), e.g. --opt colorSpace=displayP3 --opt bitDepth=16
                              --opt percent=50 --opt shortEdge=1080 --opt ppi=300
                              --opt format=original (copy + XMP sidecar) --opt metadata=none
+                             --opt addToPhotos=true --opt photosAlbum=NAME (macOS: then add
+                             the file to Apple Photos, into that album)
   lightcraft-cli snapshot [OPTIONS] [FILES/FOLDERS…]
       Run the full app UI headlessly (no window, no GPU: CPU-rasterized egui) and write PNGs.
       Options:
@@ -72,23 +76,38 @@ USAGE:
                           per line: {\"method\": \"ui.set\", \"params\": {\"view\": \"detail\"}}.
                           Replies go to stdout. `ui.screenshot` without a path writes -o (then
                           OUT-2.png, OUT-3.png…); `ui.settle {timeoutMs?}` waits for renders.
+                          A failed request (\"ok\": false) does not stop the script, but the exit
+                          status is non-zero when any request failed.
         -o, --output OUT  PNG path (a final screenshot is written here if the script took none)
         --size WxH        window size in points (default 1600x1000)
         --scale S         pixels per point (default 1)
-  lightcraft-cli merge hdr|panorama|hdr-panorama [OPTIONS] FILES…
+  lightcraft-cli merge hdr|panorama|hdr-panorama|hdr-batch [OPTIONS] FILES…
       Photo Merge: writes <first>-HDR.dng / -Pano.dng / -HDR-Pano.dng next to the first file and
-      prints the result as JSON. Options:
+      prints the result as JSON. hdr-batch merges each bracket set among the files (photos taken
+      less than a second apart at different exposures), e.g. a whole folder. Options:
         --deghost none|low|medium|high   --no-align   --bracket N (HDR panorama)
         --projection auto|spherical|cylindrical|perspective   --boundary-warp 0..100
         --auto-crop   --fill-edges   --no-auto-settings
         --preview OUT.png   only render a ≤ 1024 px preview (nothing written next to the files)
   lightcraft-cli synth-merge hdr|panorama -o DIR
       Write synthetic merge inputs (procedural scene; bracketed DNGs or overlapping PNG views).
+  lightcraft-cli denoise-serve [OPTIONS]
+      Run AI Denoise tiles for LightCraft on other computers (LIGHTCRAFT_DENOISE_URL=<this host>:7990 and
+      LIGHTCRAFT_DENOISE_TOKEN there; see docs/denoise.md). Serves the installed model selected in Settings,
+      on this computer's graphics card when it can run it, else the CPU. Plain TCP: listen on a VPN/LAN
+      address (e.g. the Tailscale IP) or firewall the port to it. Options:
+        --model ID        an installed model other than the selected one
+        --models DIR      the models folder (default: LIGHTCRAFT_DENOISE_MODELS, else this user's)
+        --listen ADDR     address:port to listen on (default 127.0.0.1:7990)
+        --token-env VAR   environment variable holding the shared token, ≥ 16 characters
+                          (default LIGHTCRAFT_DENOISE_TOKEN)
+        --run-on WHERE    auto (default), gpu or cpu
+        --max-connections N   concurrent clients (default 8)
   lightcraft-cli commands [--json]   list every command id with its parameters
   lightcraft-cli controls [--json]   list every develop control id with its range
   lightcraft-cli calibrate [--max N] [--out DIR] FOLDERS/FILES…
       Fit a colour profile per camera model from raw files and their embedded camera JPEGs
-      (Sony ARW, Nikon NEF): up to N files spread over the folders (default 300; 0 = all), pooled per
+      (Sony ARW, Nikon NEF, Fujifilm RAF): up to N files spread over the folders (default 300; 0 = all), pooled per
       model, written as <model>.json to DIR (default: the profiles folder LightCraft reads,
       <config>/camera-profiles, or $LIGHTCRAFT_CAMERA_PROFILES). Raws of a profiled model then
       take their colour from the profile and only their tone from their own JPEG.
@@ -101,10 +120,21 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 
 /// Why `--library DIR` can't be opened; for a library open in another program, how to work with
 /// that one instead (issue #99).
+/// Print the open library's warnings (an unlockable library, damaged settings files) on stderr:
+/// stdout carries command results / MCP protocol messages only.
+fn library_warnings(session: &mut Session, who: &str) {
+    for w in session.take_library_warnings() {
+        eprintln!("{who}: warning: {w}");
+    }
+}
+
 fn library_error(dir: &str, e: lightcraft_engine::EngineError) -> String {
     match e {
         lightcraft_engine::EngineError::LibraryInUse(why) => format!(
             "{dir}: {why}\nTo work with the library while the app has it open, start the app with `--control PORT` and use `lightcraft-cli mcp --connect 127.0.0.1:PORT`."
+        ),
+        e @ lightcraft_engine::EngineError::LightroomCatalog { .. } => format!(
+            "{e}\nOpen a LightCraft library with `--library DIR` (an empty folder makes a new one) and run `library.importLightroom` with the catalog's path."
         ),
         e => format!("{dir}: {e}"),
     }
@@ -123,6 +153,9 @@ fn main() -> ExitCode {
         dhat::Profiler::builder().file_name(file).build()
     };
     alloc_release::install();
+    // Warnings (a GPU render redone on the CPU, an unknown backend name) on stderr; LIGHTCRAFT_LOG
+    // or RUST_LOG picks another level (#168).
+    lightcraft_engine::logging::install("lightcraft-cli");
     let args: Vec<String> = std::env::args().skip(1).collect();
     let r = match args.first().map(String::as_str) {
         Some("run") => run(&args[1..]),
@@ -133,6 +166,7 @@ fn main() -> ExitCode {
         Some("merge") => merge(&args[1..]),
         Some("synth-merge") => synth_merge(&args[1..]),
         Some("controls") => controls(&args[1..]),
+        Some("denoise-serve") => denoise_serve(&args[1..]),
         Some("calibrate") => calibrate(&args[1..]),
         Some("--version" | "-V" | "version") => {
             println!("lightcraft-cli {}", env!("CARGO_PKG_VERSION"));
@@ -155,7 +189,8 @@ fn main() -> ExitCode {
 
 /// Raw files below `path` (or `path` itself), skipping hidden and NAS metadata folders.
 fn raw_files(path: &Path, out: &mut Vec<std::path::PathBuf>, depth: usize) {
-    let is_raw = |p: &Path| p.extension().and_then(|e| e.to_str()).is_some_and(|e| ["arw", "nef", "nrw"].iter().any(|x| e.eq_ignore_ascii_case(x)));
+    let is_raw =
+        |p: &Path| p.extension().and_then(|e| e.to_str()).is_some_and(|e| ["arw", "nef", "nrw", "raf"].iter().any(|x| e.eq_ignore_ascii_case(x)));
     if path.is_file() {
         if is_raw(path) {
             out.push(path.to_path_buf());
@@ -271,10 +306,14 @@ fn mcp(args: &[String]) -> Result<(), String> {
     while i < args.len() {
         match args[i].as_str() {
             "--connect" => {
-                // Optional address argument.
-                match args.get(i + 1).filter(|a| !a.starts_with("--") && a.contains(':')) {
+                // Optional address argument. A bare port (all digits) is taken as a port on the
+                // loopback default — matches the help's `--connect [ADDR]` hint alongside the
+                // `--control 7980` example. A non-numeric, non-`--`-prefixed token (e.g. a
+                // command id like `ui.inspect`) leaves the address at its default so the
+                // command is still consumed next. (#1178)
+                match args.get(i + 1).filter(|a| a.contains(':') || a.chars().all(|c| c.is_ascii_digit())) {
                     Some(a) => {
-                        connect = Some(a.clone());
+                        connect = Some(if a.contains(':') { a.clone() } else { format!("127.0.0.1:{a}") });
                         i += 1;
                     }
                     None => connect = Some(DEFAULT_ADDR.to_string()),
@@ -312,6 +351,7 @@ fn mcp(args: &[String]) -> Result<(), String> {
                     let mut h = Headless::default();
                     let r = h.session.open_library(dir, demo).map_err(|e| library_error(dir, e))?;
                     eprintln!("lightcraft-cli mcp: opened library {dir} ({r:?})");
+                    library_warnings(&mut h.session, "lightcraft-cli mcp");
                     h
                 }
                 None if demo => Headless::demo(),
@@ -327,8 +367,7 @@ fn mcp(args: &[String]) -> Result<(), String> {
     };
     eprintln!("lightcraft-cli mcp: serving MCP on stdio ({})", backend.describe());
     let mut server = Server::new(backend).with_command_tools(!compact);
-    let stdin = std::io::stdin();
-    server.serve(BufReader::new(stdin.lock()), std::io::stdout().lock()).map_err(|e| e.to_string())
+    server.serve_stdio(std::io::stdout()).map_err(|e| e.to_string())
 }
 
 fn merge(args: &[String]) -> Result<(), String> {
@@ -336,7 +375,8 @@ fn merge(args: &[String]) -> Result<(), String> {
         Some("hdr") => "merge.hdr",
         Some("panorama" | "pano") => "merge.panorama",
         Some("hdr-panorama") => "merge.hdrPanorama",
-        _ => return Err("merge: expected hdr, panorama or hdr-panorama".into()),
+        Some("hdr-batch") => "merge.hdrBatch",
+        _ => return Err("merge: expected hdr, panorama, hdr-panorama or hdr-batch".into()),
     };
     let mut p = serde_json::Map::new();
     let mut files = Vec::new();
@@ -377,7 +417,7 @@ fn merge(args: &[String]) -> Result<(), String> {
         }
         i += 1;
     }
-    let mut s = Session::new().with_fs();
+    let mut s = Session::new().with_fs().with_default_denoise_models().with_system_clock();
     let paths = expand_paths(&files);
     let r = s.execute("library.import", &json!({"paths": paths})).map_err(|e| e.to_string())?;
     let mut ids: Vec<u64> = r["imported"].as_array().map(|a| a.iter().filter_map(Value::as_u64).collect()).unwrap_or_default();
@@ -492,9 +532,9 @@ fn run(args: &[String]) -> Result<(), String> {
                 i += 1;
                 break;
             }
-            "--connect" => match args.get(i + 1).filter(|a| a.contains(':') && !a.contains('=')) {
+            "--connect" => match args.get(i + 1).filter(|a| !a.contains('=') && (a.contains(':') || a.chars().all(|c| c.is_ascii_digit()))) {
                 Some(a) => {
-                    connect = Some(a.clone());
+                    connect = Some(if a.contains(':') { a.clone() } else { format!("127.0.0.1:{a}") });
                     i += 1;
                 }
                 None => connect = Some(DEFAULT_ADDR.to_string()),
@@ -548,6 +588,7 @@ fn run(args: &[String]) -> Result<(), String> {
                     Some(dir) => {
                         let mut h = Headless::default();
                         h.session.open_library(dir, demo).map_err(|e| library_error(dir, e))?;
+                        library_warnings(&mut h.session, "lightcraft-cli");
                         h
                     }
                     None if demo => Headless::demo(),
@@ -597,11 +638,41 @@ fn connect_port(addr: &str) -> &str {
     addr.rsplit_once(':').map_or(addr, |(_, port)| port)
 }
 
+/// What `render --settings FILE` applies: a partial develop-settings object, or the one preset of
+/// a preset file (`.lcpreset` from `preset.export`, XMP), applied as the app applies it. Merging a
+/// `.lcpreset` as settings dropped its wrapper and applied nothing (#1730).
+enum SettingsFile {
+    Partial(Value),
+    Preset(lightcraft_engine::develop::Preset),
+}
+
+fn read_settings(p: &str) -> Result<SettingsFile, String> {
+    use lightcraft_engine::presets::{LCPRESET_EXT, parse_preset_file};
+    let bytes = std::fs::read(p).map_err(|e| format!("{p}: {e}"))?;
+    let ext = Path::new(p).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let json = serde_json::from_slice::<Value>(&bytes);
+    // a settings object never has a top-level `presets` or `settings` key; a preset file always does
+    let preset_file =
+        ext == LCPRESET_EXT || ext == "xmp" || json.as_ref().is_ok_and(|v| v.is_array() || v.get("presets").is_some() || v.get("settings").is_some());
+    if preset_file {
+        let mut list = parse_preset_file(p, &bytes).map_err(|e| format!("{p}: {e}"))?;
+        return match (list.pop(), list.len()) {
+            (Some(preset), 0) => Ok(SettingsFile::Preset(preset)),
+            (None, _) => Err(format!("{p}: no presets in this file")),
+            (Some(_), n) => Err(format!("{p}: {} presets in this file; --settings applies one, export it on its own", n + 1)),
+        };
+    }
+    match json.map_err(|e| format!("{p}: {e}"))? {
+        v @ Value::Object(_) => Ok(SettingsFile::Partial(v)),
+        _ => Err(format!("{p}: not a develop-settings object or a preset file")),
+    }
+}
+
 fn render(args: &[String]) -> Result<(), String> {
     let mut input = None;
     let mut output = None;
     let mut values = serde_json::Map::new();
-    let mut settings: Option<Value> = None;
+    let mut settings = None;
     let mut preset = None;
     let mut size: Option<u64> = None;
     let mut quality = 92u8;
@@ -616,11 +687,7 @@ fn render(args: &[String]) -> Result<(), String> {
                 let v: f64 = v.trim().parse().map_err(|_| format!("--set {k}: `{v}` is not a number"))?;
                 values.insert(k.trim().to_string(), json!(v));
             }
-            "--settings" => {
-                let p = take_value(args, &mut i, "--settings")?;
-                let text = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
-                settings = Some(serde_json::from_str(&text).map_err(|e| format!("{p}: {e}"))?);
-            }
+            "--settings" => settings = Some(read_settings(take_value(args, &mut i, "--settings")?)?),
             "--preset" => preset = Some(take_value(args, &mut i, "--preset")?.to_string()),
             "--size" => size = Some(take_value(args, &mut i, "--size")?.parse().map_err(|_| "--size expects a number")?),
             "--quality" => quality = take_value(args, &mut i, "--quality")?.parse().map_err(|_| "--quality expects 1..100")?,
@@ -637,7 +704,7 @@ fn render(args: &[String]) -> Result<(), String> {
     }
     let input = input.ok_or("render: missing input file")?;
     let output = output.ok_or("render: missing -o OUTPUT")?;
-    let mut s = Session::new().with_fs();
+    let mut s = Session::new().with_fs().with_default_denoise_models().with_system_clock();
     let abs = expand_paths(std::slice::from_ref(&input));
     let r = s.execute("library.import", &json!({"paths": abs})).map_err(|e| e.to_string())?;
     let id = r["imported"][0].as_u64().ok_or_else(|| format!("{input}: not a readable photo"))?;
@@ -646,8 +713,14 @@ fn render(args: &[String]) -> Result<(), String> {
     if let Some(p) = preset {
         run(&mut s, "preset.apply", json!({"id": p}))?;
     }
-    if let Some(st) = settings {
-        run(&mut s, "develop.merge", json!({"settings": st}))?;
+    match settings {
+        Some(SettingsFile::Partial(st)) => run(&mut s, "develop.merge", json!({"settings": st}))?,
+        Some(SettingsFile::Preset(mut p)) => {
+            p.id = "cli.settings".into();
+            s.presets.push(p);
+            run(&mut s, "preset.apply", json!({"id": "cli.settings"}))?;
+        }
+        None => {}
     }
     if !values.is_empty() {
         run(&mut s, "develop.set", json!({"values": values}))?;
@@ -660,12 +733,15 @@ fn render(args: &[String]) -> Result<(), String> {
     for (k, v) in opts {
         p[k] = v;
     }
-    let mut o = ExportOptions::from_json(&p);
     if p.get("format").is_none() {
         let ext = Path::new(&output).extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
-        o.format = ExportFormat::parse(&ext)
-            .ok_or_else(|| format!("{output}: unknown extension (use .jpg .png .tif .webp .avif .dng or --opt format=…)"))?;
+        ExportFormat::parse(&ext).ok_or_else(|| format!("{output}: unknown extension (use .jpg .png .tif .webp .avif .dng or --opt format=…)"))?;
+        // given before validating, so `bitDepth` is checked against the format written (issue #1952)
+        p["format"] = json!(ext);
     }
+    let o = ExportOptions::from_params(&p).map_err(|e| e.to_string())?;
+    // Add to Apple Photos: refused before anything is written when it can't be done
+    let after = s.after_export(&o)?;
     let e = export_photo(&mut s, lightcraft_engine::catalog::PhotoId(id), &o, 1)?;
     // never over the input (or its sidecar), however it is spelled: `render IMG.jpg -o IMG.jpg`
     let sidecars: Vec<(String, &Vec<u8>)> =
@@ -680,6 +756,12 @@ fn render(args: &[String]) -> Result<(), String> {
         eprintln!("lightcraft-cli: wrote {sc}");
     }
     eprintln!("lightcraft-cli: wrote {output} ({}×{})", e.width, e.height);
+    if let Some(photos) = after.run(&[json!({"path": output})], false) {
+        if let Some(err) = photos.get("error").and_then(Value::as_str) {
+            return Err(format!("render: {output} was written, but {err}"));
+        }
+        eprintln!("lightcraft-cli: added to Apple Photos: {photos}");
+    }
     Ok(())
 }
 
@@ -713,19 +795,22 @@ fn snapshot(args: &[String]) -> Result<(), String> {
     if script.is_none() && output.is_none() {
         return Err("snapshot: give -o OUT.png and/or --script FILE".into());
     }
-    if !(scale > 0.0 && size[0] >= 1.0 && size[1] >= 1.0) {
-        return Err("snapshot: bad --size/--scale".into());
-    }
+    lightcraft_ui_egui::headless::viewport_pixels(size, scale).map_err(|e| format!("snapshot: bad --size/--scale: {e}"))?;
     let t0 = Instant::now();
     let mut session = match &library {
         Some(dir) => {
-            let mut s = Session::new().with_fs();
+            let mut s =
+                Session::new().with_fs().with_default_denoise_models().with_system_clock().with_default_face_models().with_default_slide_templates();
             s.open_library(dir, false).map_err(|e| library_error(dir, e))?;
             s
         }
-        None if files.is_empty() => Session::with_demo().with_fs(),
-        None => Session::new().with_fs(),
+        None if files.is_empty() => {
+            Session::with_demo().with_fs().with_default_denoise_models().with_system_clock().with_default_face_models().with_default_slide_templates()
+        }
+        None => Session::new().with_fs().with_default_denoise_models().with_system_clock().with_default_face_models().with_default_slide_templates(),
     };
+    // Apply compute policy before imports or the first scripted query can discover an adapter.
+    session.execute("app.gpu", &json!({"enabled": false})).map_err(|e| e.to_string())?;
     if !files.is_empty() {
         let ti = Instant::now();
         let r = session.execute("library.import", &json!({"paths": expand_paths(&files)})).map_err(|e| e.to_string())?;
@@ -740,7 +825,13 @@ fn snapshot(args: &[String]) -> Result<(), String> {
         })),
         ..Default::default()
     };
-    let app = lightcraft_ui_egui::LightcraftApp::new(session, services);
+    let mut app = lightcraft_ui_egui::LightcraftApp::new(session, services);
+    // Snapshot sessions promise no GPU: disable photo compute as well as the compositor
+    // before the first frame can start background adapter discovery.
+    // This UI state is session-local: the CLI neither loads nor saves desktop ui.json.
+    app.ui.settings.gpu = false;
+    // as the desktop app opens it: an empty library on the grid, where Import is offered
+    lightcraft_ui_egui::panels::empty_library::open_on_empty_library(&mut app);
     let mut h = Headless::new(app, size, scale);
     let timeout = Duration::from_secs(60);
     let mut shots = 0usize;
@@ -756,6 +847,9 @@ fn snapshot(args: &[String]) -> Result<(), String> {
         Some(p.with_file_name(format!("{stem}-{shots}.{ext}")).to_string_lossy().to_string())
     };
     let mut wrote_output = false;
+    // Issue #166: a scripted request that fails still gets its reply printed and the run carries
+    // on (like `run --keep-going`), but the exit status reports it — CI judges by exit status.
+    let mut failed = 0usize;
     if let Some(script) = &script {
         let text = std::fs::read_to_string(script).map_err(|e| format!("{script}: {e}"))?;
         let mut out = std::io::stdout().lock();
@@ -779,7 +873,17 @@ fn snapshot(args: &[String]) -> Result<(), String> {
                         match next_path(&mut shots) {
                             Some(p) => {
                                 wrote_output = true;
-                                params["path"] = json!(p);
+                                // `params` is untrusted script JSON: `params["path"] = …` panics on
+                                // an array or a string. Only an object (or null, like an absent
+                                // `params`) may take the path.
+                                if params.is_null() {
+                                    params = json!({});
+                                }
+                                if let Some(o) = params.as_object_mut() {
+                                    o.insert("path".into(), json!(p));
+                                } else {
+                                    return Err(format!("{script}:{}: ui.screenshot: `params` must be a JSON object", n + 1));
+                                }
                             }
                             None => return Err(format!("{script}:{}: ui.screenshot needs a `path` (or give -o)", n + 1)),
                         }
@@ -788,6 +892,9 @@ fn snapshot(args: &[String]) -> Result<(), String> {
                 }
                 _ => h.request(&method, params, timeout),
             };
+            if reply["ok"] != true {
+                failed += 1;
+            }
             if let Some(o) = reply.as_object_mut() {
                 o.insert("id".into(), id);
                 // wall time of the request (incl. the frames it ran), and since the start
@@ -824,7 +931,7 @@ fn snapshot(args: &[String]) -> Result<(), String> {
         }
     }
     eprintln!("lightcraft-cli snapshot: done in {:.2} s ({} frames)", t0.elapsed().as_secs_f64(), h.frames());
-    Ok(())
+    if failed > 0 { Err(format!("{failed} scripted request(s) failed")) } else { Ok(()) }
 }
 
 fn commands(args: &[String]) -> Result<(), String> {
@@ -871,4 +978,49 @@ fn controls(args: &[String]) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// `denoise-serve`: the remote half of AI Denoise (`lightcraft_denoise::remote`).
+#[cfg(feature = "denoise")]
+fn denoise_serve(args: &[String]) -> Result<(), String> {
+    use lightcraft_denoise::remote::{DEFAULT_PORT, ServerOptions, serve};
+    use lightcraft_engine::denoise::RunOn;
+    let mut model: Option<String> = None;
+    let mut dir: Option<String> = None;
+    let mut listen = format!("127.0.0.1:{DEFAULT_PORT}");
+    let mut token_env = "LIGHTCRAFT_DENOISE_TOKEN".to_string();
+    let mut run_on = RunOn::Auto;
+    let mut max_connections = 8usize;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--model" => model = Some(take_value(args, &mut i, "--model")?.to_string()),
+            "--models" => dir = Some(take_value(args, &mut i, "--models")?.to_string()),
+            "--listen" => listen = take_value(args, &mut i, "--listen")?.to_string(),
+            "--token-env" => token_env = take_value(args, &mut i, "--token-env")?.to_string(),
+            "--run-on" => {
+                let v = take_value(args, &mut i, "--run-on")?;
+                run_on = RunOn::parse(v).ok_or_else(|| format!("--run-on expects auto, gpu or cpu, not `{v}`"))?;
+            }
+            "--max-connections" => {
+                max_connections = take_value(args, &mut i, "--max-connections")?.parse().map_err(|_| "--max-connections expects a number")?
+            }
+            other => return Err(format!("denoise-serve: unknown option `{other}`")),
+        }
+        i += 1;
+    }
+    let token = std::env::var(&token_env).map_err(|_| format!("denoise-serve: set the shared token in ${token_env}"))?;
+    let s = lightcraft_engine::denoise::serving(dir.as_deref().map(Path::new), model.as_deref(), run_on)?;
+    let listener = std::net::TcpListener::bind(&listen).map_err(|e| format!("denoise-serve: {listen}: {e}"))?;
+    eprintln!("lightcraft-cli denoise-serve: {} {} ({}) on {listen} via {}", s.model.id, s.model.version, s.model.sha256, s.device);
+    if listen.starts_with("0.0.0.0") || listen.starts_with("[::]") {
+        eprintln!("lightcraft-cli denoise-serve: listening on every interface; firewall the port to your VPN/LAN (the protocol is not encrypted)");
+    }
+    let opts = ServerOptions { token, max_connections, ..Default::default() };
+    serve(listener, s.model, s.tile, s.device, s.run, opts, std::sync::Arc::new(|m: &str| eprintln!("lightcraft-cli denoise-serve: {m}")))
+}
+
+#[cfg(not(feature = "denoise"))]
+fn denoise_serve(_: &[String]) -> Result<(), String> {
+    Err("denoise-serve: this build has no denoise support (build with the `denoise` feature)".into())
 }

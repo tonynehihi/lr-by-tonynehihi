@@ -16,15 +16,7 @@ pub const HEIGHT: f32 = 40.0;
 const WIDE: f32 = 1240.0;
 
 /// Colour-label swatches (UI colours, our own choice).
-pub fn label_color(l: ColorLabel) -> Color32 {
-    match l {
-        ColorLabel::Red => Color32::from_rgb(222, 72, 72),
-        ColorLabel::Yellow => Color32::from_rgb(232, 196, 58),
-        ColorLabel::Green => Color32::from_rgb(88, 176, 92),
-        ColorLabel::Blue => Color32::from_rgb(72, 130, 222),
-        ColorLabel::Purple => Color32::from_rgb(158, 100, 210),
-    }
-}
+pub use crate::theme::label_color;
 
 fn filter(app: &mut LightcraftApp, patch: Value) {
     let _ = app.run("library.filter", patch);
@@ -40,6 +32,7 @@ fn caption(ui: &mut egui::Ui, text: &str) {
 fn toggle(ui: &mut egui::Ui, id: &str, on: bool, tip: &str, draw: impl FnOnce(&egui::Painter, Rect, Color32)) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
+    crate::widgets::announce_selected(&resp, crate::i18n::tr(tip), on);
     register(ui.ctx(), format!("filter:{id}"), r);
     let p = ui.painter();
     if on {
@@ -65,7 +58,13 @@ fn toggle(ui: &mut egui::Ui, id: &str, on: bool, tip: &str, draw: impl FnOnce(&e
 /// A dropdown showing `current`; `items` are (label, filter patch, selected).
 fn picker(app: &mut LightcraftApp, ui: &mut egui::Ui, id: &str, current: &str, active: bool, items: Vec<(String, Value, bool)>) {
     let t = Tokens::get(ui.ctx());
-    let r = crate::widgets::dropdown(ui, &format!("filter-{id}"), crate::i18n::tr(current), t.font(12.5), if active { t.text } else { t.text_label });
+    let r = crate::widgets::dropdown(
+        ui,
+        &format!("filter-{id}"),
+        if active && matches!(id, "camera" | "lens" | "keyword") { current } else { crate::i18n::tr(current) },
+        t.font(12.5),
+        if active { t.text } else { t.text_label },
+    );
     if active {
         ui.painter().rect_stroke(r.rect.expand(2.0), 4.0, Stroke::new(1.0, t.accent.gamma_multiply(0.7)), StrokeKind::Outside);
     }
@@ -73,7 +72,17 @@ fn picker(app: &mut LightcraftApp, ui: &mut egui::Ui, id: &str, current: &str, a
     egui::Popup::menu(&r).show(|ui| {
         egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
             for (label, patch, sel) in &items {
-                if ui.selectable_label(*sel, crate::i18n::tr(label)).clicked() {
+                if ui
+                    .selectable_label(
+                        *sel,
+                        if matches!(id, "camera" | "lens" | "keyword") && patch.get(id).is_some_and(|value| !value.is_null()) {
+                            label.as_str()
+                        } else {
+                            crate::i18n::tr(label)
+                        },
+                    )
+                    .clicked()
+                {
                     chosen = Some(patch.clone());
                 }
             }
@@ -123,6 +132,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     );
     for i in 1..=5u8 {
         let (r, resp) = ui.allocate_exact_size(vec2(17.0, 26.0), Sense::click());
+        crate::widgets::announce(&resp, format!("{i} ★"));
         register(ui.ctx(), format!("filter:star{i}"), r);
         let filled = i <= f.rating;
         let c = if filled {
@@ -152,6 +162,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             Flag::Reject if on => t.reject,
             _ => Color32::TRANSPARENT,
         };
+        let icon = if on && flag == Flag::Pick { Icon::FlagPickFilled } else { icon };
         let resp = toggle(ui, id, on, tip, |p, r, c| paint(p, r, icon, if color == Color32::TRANSPARENT { c } else { color }));
         if resp.clicked() {
             filter(app, json!({"flag": if on { Value::Null } else { json!(id) }}));
@@ -171,7 +182,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     for l in ColorLabel::ALL {
         let on = chosen.contains(&l);
         let name = format!("{l:?}").to_lowercase();
-        let tip = format!("{} label (click more labels to show any of them)", app.session.catalog.label_name(l));
+        let tip = crate::i18n::tr_format!("{} label (click more labels to show any of them)", crate::i18n::color_label(&app.session.catalog, l));
         let resp = toggle(ui, &format!("label-{name}"), on, &tip, |p, r, _| {
             p.circle_filled(r.center(), 5.5, label_color(l));
         });
@@ -272,7 +283,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         let _ = app.run("library.clearFilter", json!({}));
     }
     // filter presets: apply one, save the current filter, delete
-    let presets = ui.button(egui::RichText::new(crate::i18n::tr("Presets ▾")).font(t.font(12.5)));
+    let presets = crate::widgets::dropdown(ui, "filterPresets", crate::i18n::tr("Presets"), t.font(12.5), t.text);
     register(ui.ctx(), "button:filterPresets", presets.rect);
     egui::Popup::menu(&presets).show(|ui| {
         let names: Vec<String> = app.session.filter_presets.iter().map(|f| f.name.clone()).collect();

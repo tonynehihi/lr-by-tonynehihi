@@ -121,7 +121,7 @@ pub fn window(app: &mut LightcraftApp, ctx: &Context) {
                 }
                 Err(e) => app.missing_error = Some(e),
             };
-            if let Err(e) = crate::tasks::spawn(app, SEARCH_LABEL, work, done) {
+            if let Err(e) = crate::tasks::spawn(app, SEARCH_LABEL, None, work, done) {
                 app.missing_error = Some(e);
             }
         }

@@ -38,11 +38,46 @@ impl DevelopSettings {
         serde_json::from_value(v.clone())
     }
 
-    /// Merge a partial JSON object into these settings (fields not mentioned are kept).
+    /// Merge a partial JSON object into these settings (fields not mentioned are kept). A white balance that
+    /// names no [`WbScale`] keeps the meaning it always had (`Legacy`), whatever scale these settings were on: a
+    /// partial from before the scale existed, or one that never said, must not become Kelvin by landing on
+    /// Kelvin settings. Out-of-range values are brought back into range ([`DevelopSettings::keep_in_range`]).
     pub fn merged(&self, partial: &Value) -> Result<DevelopSettings, serde_json::Error> {
         let mut v = self.to_json();
         presets::deep_merge(&mut v, partial);
-        DevelopSettings::from_json(&v)
+        let mut out = DevelopSettings::from_json(&v)?;
+        if let Some(wb) = partial.get("wb").and_then(Value::as_object)
+            && (wb.contains_key("temp") || wb.contains_key("tint"))
+            && !wb.contains_key("scale")
+        {
+            out.wb.scale = WbScale::Legacy;
+        }
+        out.keep_in_range(self);
+        Ok(out)
+    }
+
+    /// What crs XMP import does to the values it reads, for settings that arrive as JSON (presets, `develop.merge`,
+    /// `render --settings`; issue #1946): every slider clamped through its control spec, point curves in 0..1, and a
+    /// crop with no area left as it was in `before`. Unrotated, the crop is clipped to the photo first; a turned crop
+    /// may reach past 0..1 and is left to the crop tools, which know the photo's size.
+    fn keep_in_range(&mut self, before: &DevelopSettings) {
+        for c in controls::CONTROLS {
+            if let Some(v) = controls::get(self, c.id) {
+                controls::set(self, c.id, v);
+            }
+        }
+        let c = &mut self.curve;
+        for p in [&mut c.master, &mut c.red, &mut c.green, &mut c.blue].into_iter().flatten() {
+            *p = lightcraft_geom::Point::new(p.x.clamp(0.0, 1.0), p.y.clamp(0.0, 1.0));
+        }
+        let g = &mut self.crop.geometry;
+        if g.angle == 0.0 {
+            g.rect = g.rect.intersect(&lightcraft_geom::Rect::UNIT);
+        }
+        if g.rect.is_empty() {
+            let old = before.crop.geometry.rect;
+            g.rect = if old.is_empty() { lightcraft_geom::Rect::UNIT } else { old };
+        }
     }
 
     /// Stable 64-bit hash of the settings (FNV-1a over canonical JSON), for preview cache keys.
@@ -56,16 +91,51 @@ impl DevelopSettings {
         h
     }
 
-    /// True if nothing differs from a fresh default (ignoring white balance "as shot" values).
+    /// True if nothing differs from a fresh default (ignoring white balance "as shot" values, and
+    /// the rendering process: that is not an edit).
     pub fn is_unedited(&self) -> bool {
         let mut a = self.clone();
         let d = DevelopSettings::default();
         a.wb = d.wb;
+        a.process = d.process;
         a == d
     }
 
     pub fn section_enabled(&self, section: &str) -> bool {
         !self.disabled_sections.iter().any(|s| s == section)
+    }
+
+    /// The settings as rendered: an Edit-panel section whose eye is off contributes nothing (issue
+    /// #316). Light (with its tone curve), Color (white balance, presence, the mixers, colour grading
+    /// and point colour) and Detail are reset to their defaults here; Effects, Optics, Geometry and
+    /// Calibration the pipeline switches off where it applies them. Borrowed when every section is on.
+    pub fn effective(&self) -> std::borrow::Cow<'_, DevelopSettings> {
+        let off = |section: &str| !self.section_enabled(section);
+        if !(off("light") || off("color") || off("detail")) {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut d = self.clone();
+        if off("light") {
+            d.reset_section(Section::Light);
+            d.reset_section(Section::Curve);
+        }
+        if off("color") {
+            for section in [Section::Color, Section::Mixer, Section::BwMix, Section::Grading, Section::PointColor] {
+                d.reset_section(section);
+            }
+            d.point_colors.clear();
+        }
+        if off("detail") {
+            d.reset_section(Section::Detail);
+        }
+        std::borrow::Cow::Owned(d)
+    }
+
+    /// How much of the AI-denoised picture to mix in, 0 (none) to 1 (all of it): the Denoise amount, unless the Detail
+    /// section is switched off or the value is not a number.
+    pub fn denoise_amount(&self) -> f32 {
+        let a = self.enhance.denoise;
+        if a.is_finite() && self.enhance.denoise_enabled() && self.section_enabled("detail") { (a / 100.0).clamp(0.0, 1.0) as f32 } else { 0.0 }
     }
 
     pub fn set_section_enabled(&mut self, section: &str, on: bool) {
@@ -86,6 +156,7 @@ impl DevelopSettings {
                 self.curve = d;
             }
             Section::Color => self.wb.mode = WbMode::AsShot,
+            Section::Detail => self.enhance.denoise_on = None,
             _ => {}
         }
     }
@@ -95,6 +166,9 @@ impl DevelopSettings {
         self.masks.iter().map(|m| m.id).max().map_or(1, |m| m + 1)
     }
 }
+
+#[cfg(test)]
+mod tests_process;
 
 #[cfg(test)]
 mod tests {
@@ -129,6 +203,68 @@ mod tests {
     }
 
     #[test]
+    fn white_balance_scale_reads_absent_as_legacy_and_writes_only_kelvin() {
+        // settings from before the scale existed: no field, `Legacy`, and written back without it
+        let old = json!({"wb": {"mode": "custom", "temp": 5800.0, "tint": 3.0}});
+        let s = DevelopSettings::from_json(&old).unwrap();
+        assert_eq!(s.wb.scale, WbScale::Legacy);
+        assert_eq!(s.to_json()["wb"], old["wb"]);
+        assert_eq!(DevelopSettings::default().wb.scale, WbScale::Legacy);
+        assert!(DevelopSettings::default().to_json()["wb"].get("scale").is_none());
+        // written on the Kelvin scale: said so, and read back
+        let mut k = s.clone();
+        k.wb.scale = WbScale::Kelvin;
+        assert_eq!(k.to_json()["wb"]["scale"], json!("kelvin"));
+        assert_eq!(DevelopSettings::from_json(&k.to_json()).unwrap(), k);
+        assert_ne!(k.hash64(), s.hash64());
+        // an unknown scale from a newer build is an error, not a panic
+        assert!(DevelopSettings::from_json(&json!({"wb": {"scale": "mired"}})).is_err());
+    }
+
+    #[test]
+    fn a_partial_white_balance_without_a_scale_is_legacy() {
+        let mut base = DevelopSettings::default();
+        base.wb.scale = WbScale::Kelvin;
+        // an old preset's white balance lands on Kelvin settings: it keeps its relative meaning
+        let out = apply_partial(&base, &json!({"wb": {"mode": "custom", "temp": 5800.0}}), 1.0);
+        assert_eq!((out.wb.scale, out.wb.temp), (WbScale::Legacy, 5800.0));
+        let out = apply_partial(&base, &json!({"wb": {"tint": 12.0}}), 1.0);
+        assert_eq!(out.wb.scale, WbScale::Legacy);
+        // one that says Kelvin stays Kelvin; a mode alone leaves the scale as it was
+        let out = apply_partial(&base, &json!({"wb": {"mode": "custom", "temp": 5800.0, "scale": "kelvin"}}), 1.0);
+        assert_eq!(out.wb.scale, WbScale::Kelvin);
+        let out = apply_partial(&base, &json!({"wb": {"mode": "cloudy"}}), 1.0);
+        assert_eq!(out.wb.scale, WbScale::Kelvin);
+        let out = apply_partial(&base, &json!({"light": {"exposure": 1.0}}), 1.0);
+        assert_eq!(out.wb.scale, WbScale::Kelvin);
+        // the plain merge (`develop.merge`) follows the same rule
+        assert_eq!(base.merged(&json!({"wb": {"temp": 5800.0}})).unwrap().wb.scale, WbScale::Legacy);
+        assert_eq!(base.merged(&json!({"wb": {"temp": 5800.0, "scale": "kelvin"}})).unwrap().wb.scale, WbScale::Kelvin);
+        assert_eq!(base.merged(&json!({"wb": {"mode": "auto"}})).unwrap().wb.scale, WbScale::Kelvin);
+    }
+
+    #[test]
+    fn default_hdr_is_not_serialized_so_existing_hashes_stay() {
+        let s = DevelopSettings::default();
+        assert!(s.to_json().get("hdr").is_none(), "HDR off must not change the settings JSON or hash64");
+        let mut on = s.clone();
+        on.hdr.enabled = true;
+        assert!(on.to_json().get("hdr").is_some());
+        assert_ne!(on.hash64(), s.hash64());
+        assert_eq!(DevelopSettings::from_json(&on.to_json()).unwrap(), on);
+    }
+
+    #[test]
+    fn hdr_peak_is_finite_for_a_non_finite_headroom() {
+        let mut h = Hdr { enabled: true, max_ev: f64::NAN, ..Hdr::default() };
+        assert_eq!(h.peak(), (Hdr::DEFAULT_MAX_EV as f32).exp2());
+        h.max_ev = f64::INFINITY;
+        assert_eq!(h.peak(), (Hdr::DEFAULT_MAX_EV as f32).exp2());
+        h.max_ev = -3.0;
+        assert_eq!(h.peak(), 1.0);
+    }
+
+    #[test]
     fn missing_fields_take_defaults_and_unknown_ignored() {
         let s = DevelopSettings::from_json(&json!({"light": {"exposure": 0.5}, "futureThing": 3})).unwrap();
         assert_eq!(s.light.exposure, 0.5);
@@ -142,6 +278,30 @@ mod tests {
         assert_eq!(m.light.contrast, 20.0);
         assert_eq!(m.effects.clarity, 10.0);
         assert_eq!(m.light.exposure, 0.0);
+    }
+
+    #[test]
+    fn merged_settings_are_kept_in_range() {
+        // issue #1946: `develop.merge`, `render --settings` and presets stored whatever the JSON said
+        let mut base = DevelopSettings::default();
+        base.crop.geometry.rect = lightcraft_geom::Rect::new(0.1, 0.2, 0.8, 0.9);
+        let m = base
+            .merged(&json!({"light": {"exposure": 1e308}, "vignette": {"amount": -1e308}, "geometry": {"scale": 0}, "optics": {"distortion": 1e308}}))
+            .unwrap();
+        assert_eq!((m.light.exposure, m.vignette.amount, m.geometry.scale, m.optics.distortion), (5.0, -100.0, 50.0, 100.0));
+        // point curves stay in 0..1, as an imported XMP curve does
+        let m = base.merged(&json!({"curve": {"master": [{"x": -3, "y": 0}, {"x": 1, "y": 1e308}]}})).unwrap();
+        assert_eq!(m.curve.master, vec![lightcraft_geom::Point::new(0.0, 0.0), lightcraft_geom::Point::new(1.0, 1.0)]);
+        // a crop with no area is left out, as XMP import leaves out one whose edges are inverted
+        for rect in
+            [json!({"x0": 0.9, "x1": 0.1, "y0": 0, "y1": 1}), json!({"x0": 1e308, "x1": -1e308, "y0": 0, "y1": 1}), json!({"x0": 0.5, "x1": 0.5})]
+        {
+            let m = base.merged(&json!({"crop": {"geometry": {"rect": rect}}})).unwrap();
+            assert_eq!(m.crop.geometry.rect, base.crop.geometry.rect, "{rect}");
+        }
+        // unrotated, the crop stays inside the photo
+        let m = base.merged(&json!({"crop": {"geometry": {"rect": {"x0": -1e308, "y0": 0.25, "x1": 1e308, "y1": 0.75}}}})).unwrap();
+        assert_eq!(m.crop.geometry.rect, lightcraft_geom::Rect::new(0.0, 0.25, 1.0, 0.75));
     }
 
     #[test]
@@ -166,5 +326,41 @@ mod tests {
         assert_eq!(s.disabled_sections.len(), 1);
         s.set_section_enabled("effects", true);
         assert!(s.section_enabled("effects"));
+    }
+
+    #[test]
+    fn the_denoise_amount_is_a_slider_and_follows_the_detail_section() {
+        let mut s = DevelopSettings::default();
+        assert_eq!(s.denoise_amount(), 0.0);
+        assert!(controls::set(&mut s, "enhance.denoise", 60.0));
+        assert_eq!(controls::get(&s, "enhance.denoise"), Some(60.0));
+        assert!((s.denoise_amount() - 0.6).abs() < 1e-6);
+        // the slider's range is 0 to 100; values outside it are brought in
+        controls::set(&mut s, "enhance.denoise", 500.0);
+        assert_eq!(s.denoise_amount(), 1.0);
+        controls::set(&mut s, "enhance.denoise", -5.0);
+        assert_eq!(s.denoise_amount(), 0.0);
+        // switching the Detail section off switches the denoise off with it; a settings file with a bad number does nothing
+        controls::set(&mut s, "enhance.denoise", 80.0);
+        s.set_section_enabled("detail", false);
+        assert_eq!(s.denoise_amount(), 0.0);
+        s.set_section_enabled("detail", true);
+        s.enhance.denoise = f64::NAN;
+        assert_eq!(s.denoise_amount(), 0.0);
+        // it is part of Detail: a reset of the section clears it
+        controls::set(&mut s, "enhance.denoise", 40.0);
+        s.reset_section(Section::Detail);
+        assert_eq!(s.enhance.denoise, 0.0);
+        // The later independent switch preserves Amount when off, and can be on at zero.
+        controls::set(&mut s, "enhance.denoise", 75.0);
+        s.enhance.denoise_on = Some(false);
+        assert_eq!(s.denoise_amount(), 0.0);
+        assert_eq!(s.enhance.denoise, 75.0);
+        s.enhance.denoise_on = Some(true);
+        assert_eq!(s.denoise_amount(), 0.75);
+        controls::set(&mut s, "enhance.denoise", 0.0);
+        assert!(s.enhance.denoise_enabled());
+        s.reset_section(Section::Detail);
+        assert_eq!(s.enhance.denoise_on, None);
     }
 }

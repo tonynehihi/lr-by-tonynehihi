@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use js_sys::{Array, Object, Reflect, Uint8Array, Uint32Array};
 use lightcraft_engine::catalog::PhotoId;
-use lightcraft_engine::media::{DISK_CACHE_BYTES, RenderJob, RenderResult, SourceLevel};
+use lightcraft_engine::media::{RenderJob, RenderResult, SourceLevel};
 use lightcraft_engine::pipeline::Rendered;
 use lightcraft_preview::{Hash128, PreviewCache};
 use lightcraft_raster::{Histogram, Rgba8};
@@ -27,7 +27,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 use crate::backend::Backend;
-use crate::wire::{CacheWatch, ThumbIndex, WireJob, WorkerCore, thumb_storage_key};
+use crate::wire::{CacheWatch, ThumbIndex, WireJob, WorkerCore, WorkerSlots, thumb_storage_key};
 
 /// Storage key of the thumbnail index.
 pub const THUMB_INDEX: &str = "thumbs/index.json";
@@ -127,11 +127,7 @@ async fn handle(scope: &web_sys::DedicatedWorkerGlobalScope, backend: Option<Bac
         Ok((r, stored)) => {
             let rgba = Uint8Array::from(r.image.as_bytes().as_ref());
             let h = &r.histogram;
-            let hist = Uint32Array::new_with_length(4 * 256 + 1);
-            for (i, ch) in [&h.r, &h.g, &h.b, &h.luma].into_iter().enumerate() {
-                hist.subarray((i * 256) as u32, ((i + 1) * 256) as u32).copy_from(ch);
-            }
-            hist.set_index(1024, h.total);
+            let hist = Uint32Array::from(h.to_words().as_slice());
             set(&out, "ok", &true.into());
             set(&out, "w", &(r.image.width as u32).into());
             set(&out, "h", &(r.image.height as u32).into());
@@ -165,6 +161,8 @@ struct Busy {
     level: SourceLevel,
     key: u64,
     cache: Option<(Arc<PreviewCache>, Hash128)>,
+    /// A slideshow slide: the worker renders the photo, it is composed here when it comes back.
+    slide: Option<Arc<lightcraft_engine::slide::SlideCompose>>,
 }
 
 struct W {
@@ -183,6 +181,9 @@ struct Inner {
     /// (photo, level) → worker that last decoded it.
     affinity: HashMap<(PhotoId, SourceLevel), usize>,
     index: ThumbIndex,
+    /// The session's thumbnail cache budget in bytes. Kept here because the prune happens on a
+    /// worker message, where the session is out of reach; the app refreshes it every frame.
+    budget: u64,
     backend: Option<Backend>,
     ctx: egui::Context,
     /// Jobs finished by workers / inline (for diagnostics).
@@ -214,7 +215,15 @@ impl Workers {
     /// Start `n` workers (none: every job runs inline). `store` is the backend kind for workers.
     /// `index` lists the stored thumbnails of `cache`, the session's rendered-thumbnail cache
     /// now: watching it from the start, a clear before the first render request still counts.
-    pub fn start(n: usize, store: &str, backend: Option<Backend>, index: ThumbIndex, cache: &Arc<PreviewCache>, ctx: egui::Context) -> Workers {
+    pub fn start(
+        n: usize,
+        store: &str,
+        backend: Option<Backend>,
+        index: ThumbIndex,
+        cache: &Arc<PreviewCache>,
+        budget: u64,
+        ctx: egui::Context,
+    ) -> Workers {
         let w = Workers(Rc::new(RefCell::new(Inner {
             preview_generation: CacheWatch::new(cache),
             workers: Vec::new(),
@@ -222,6 +231,7 @@ impl Workers {
             next_id: 0,
             affinity: HashMap::new(),
             index,
+            budget,
             backend,
             ctx,
             remote_done: 0,
@@ -233,14 +243,17 @@ impl Workers {
             log::warn!("render workers: no compiled module on the page (window.lightcraftModule); rendering on the main thread");
             return w;
         }
-        for i in 0..n {
+        let mut slots = WorkerSlots::default();
+        for attempt in 0..n {
+            // The callbacks name their worker by its place in `workers`; a failed attempt takes none.
+            let i = slots.peek();
             let opts = web_sys::WorkerOptions::new();
             opts.set_type(web_sys::WorkerType::Module);
-            opts.set_name(&format!("lightcraft-render-{i}"));
+            opts.set_name(&format!("lightcraft-render-{attempt}"));
             let worker = match web_sys::Worker::new_with_options("./worker.js", &opts) {
                 Ok(x) => x,
                 Err(e) => {
-                    log::warn!("render worker {i}: {e:?}");
+                    log::warn!("render worker {attempt}: {e:?}");
                     continue;
                 }
             };
@@ -256,10 +269,15 @@ impl Workers {
             set(&init, "module", &module);
             set(&init, "store", &store.into());
             if let Err(e) = worker.post_message(&init) {
-                log::warn!("render worker {i}: {e:?}");
+                log::warn!("render worker {attempt}: {e:?}");
+                // It never joins the list, so it must not answer to the index of the next worker.
+                worker.set_onmessage(None);
+                worker.set_onerror(None);
+                worker.terminate();
                 continue;
             }
             w.0.borrow_mut().workers.push(W { worker, ready: false, dead: false, busy: None });
+            slots.commit();
         }
         w
     }
@@ -279,8 +297,10 @@ impl Workers {
                     level: b.level,
                     key: b.key,
                     rendered: Err(msg),
+                    gpu_fallback: None,
                     loaded: None,
                     quick: None,
+                    display: None,
                 };
                 g.done.push((b.slot, r, 0.0));
             }
@@ -304,12 +324,8 @@ impl Workers {
             let (wd, ht) = (get(&data, "w").as_f64().unwrap_or(0.0) as usize, get(&data, "h").as_f64().unwrap_or(0.0) as usize);
             let rgba = Uint8Array::new(&get(&data, "rgba")).to_vec();
             let hist = Uint32Array::new(&get(&data, "hist")).to_vec();
-            match Rgba8::from_bytes(wd, ht, &rgba) {
-                Some(image) if hist.len() == 1025 => {
-                    let ch = |k: usize| hist[k * 256..(k + 1) * 256].to_vec();
-                    let histogram = Histogram { r: ch(0), g: ch(1), b: ch(2), luma: ch(3), total: hist[1024] };
-                    Ok(Rendered { image, histogram, deep: None, hdr_linear: None })
-                }
+            match (Rgba8::from_bytes(wd, ht, &rgba), Histogram::from_words(&hist)) {
+                (Some(image), Some(histogram)) => Ok(Rendered { image, histogram, deep: None, hdr_linear: None }),
                 _ => Err("render worker: bad image".to_string()),
             }
         } else {
@@ -328,7 +344,10 @@ impl Workers {
             }
             if stored > 0 {
                 g.index.insert(&hex, stored);
-                let gone = g.index.prune(DISK_CACHE_BYTES);
+                // The session's own budget (`library.preferences ▸ cacheMb`), not the native
+                // default: the browser accepted the setting, so it has to be the one enforced
+                // (#245).
+                let gone = g.index.prune(g.budget);
                 if !gone.is_empty()
                     && let Some(be) = g.backend.clone()
                 {
@@ -353,6 +372,13 @@ impl Workers {
             });
         }
         g.remote_done += 1;
+        let rendered = match (rendered, &b.slide) {
+            (Ok(mut r), Some(slide)) => {
+                r.image = slide.compose(&r.image);
+                Ok(r)
+            }
+            (r, _) => r,
+        };
         g.done.push((
             b.slot,
             RenderResult {
@@ -362,8 +388,10 @@ impl Workers {
                 level: b.level,
                 key: b.key,
                 rendered,
+                gpu_fallback: None,
                 loaded: None,
                 quick: None,
+                display: None,
             },
             ms,
         ));
@@ -385,6 +413,12 @@ impl Workers {
         let alive = g.workers.iter().filter(|w| !w.dead).count();
         let ready = g.workers.iter().filter(|w| w.ready && !w.dead).count();
         (alive, ready, g.remote_done, g.inline_done)
+    }
+
+    /// The budget the thumbnail index is pruned to. The app refreshes it from the session every
+    /// frame, so `library.preferences ▸ cacheMb` applies to the next stored thumbnail.
+    pub fn set_budget(&self, bytes: u64) {
+        self.0.borrow_mut().budget = bytes;
     }
 }
 
@@ -408,8 +442,10 @@ impl RenderOffload for Workers {
                 level: job.level,
                 key: job.key,
                 rendered: Ok(Rendered { image, histogram, deep: None, hdr_linear: None }),
+                gpu_fallback: None,
                 loaded: None,
                 quick: None,
+                display: None,
             };
             g.done.push((slot, r, 0.0));
             return None;
@@ -466,6 +502,7 @@ impl RenderOffload for Workers {
             level: job.level,
             key: job.key,
             cache: job.cache,
+            slide: job.slide,
         });
         None
     }

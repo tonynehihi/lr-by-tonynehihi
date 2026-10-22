@@ -26,12 +26,34 @@ pub struct ControlRequest {
     pub method: String,
     pub params: Value,
     pub reply: Sender<ControlResponse>,
+    /// Who has the request: [`PENDING`], [`TAKEN`] (the app runs it) or [`ABANDONED`] (the
+    /// sender gave up on it, so the app must not run it late: issue #718).
+    pub state: std::sync::Arc<std::sync::atomic::AtomicU8>,
 }
+
+/// Queued, not yet run.
+pub const PENDING: u8 = 0;
+/// The app has started it: it will answer.
+pub const TAKEN: u8 = 1;
+/// Its sender gave up waiting (the window drew no frames): it is dropped unrun.
+pub const ABANDONED: u8 = 2;
 
 impl ControlRequest {
     pub fn new(method: impl Into<String>, params: Value) -> (Self, std::sync::mpsc::Receiver<ControlResponse>) {
         let (tx, rx) = std::sync::mpsc::channel();
-        (Self { method: method.into(), params, reply: tx }, rx)
+        (Self { method: method.into(), params, reply: tx, state: Default::default() }, rx)
+    }
+
+    /// Claim the request for running; false when its sender already gave up on it.
+    pub fn take(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        self.state.compare_exchange(PENDING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_ok() || self.state.load(Ordering::SeqCst) == TAKEN
+    }
+
+    /// Give up on the request; false when the app has already started it (it will answer).
+    pub fn abandon(state: &std::sync::atomic::AtomicU8) -> bool {
+        use std::sync::atomic::Ordering;
+        state.compare_exchange(PENDING, ABANDONED, Ordering::SeqCst, Ordering::SeqCst).is_ok() || state.load(Ordering::SeqCst) == ABANDONED
     }
 }
 
@@ -54,8 +76,21 @@ fn wrap(r: Result<Value, String>) -> Outcome {
 }
 
 pub fn all_commands(app: &LightcraftApp) -> Value {
-    let mut v: Vec<Value> = app.session.commands().into_iter().map(|c| serde_json::to_value(c).unwrap_or_default()).collect();
+    let keymap = &app.ui.settings.keymap;
+    let mut v: Vec<Value> = app
+        .session
+        .commands()
+        .into_iter()
+        .map(|c| {
+            let mut v = serde_json::to_value(&c).unwrap_or_default();
+            if let Some(o) = v.as_object_mut() {
+                o.insert("shortcut".into(), json!(crate::shortcuts::shortcut_of(keymap, c.id)));
+            }
+            v
+        })
+        .collect();
     for (id, label, sc, menu) in crate::menus::ui_commands() {
+        let sc = crate::shortcuts::binding(keymap, id, *sc);
         v.push(json!({"id": id, "label": label, "shortcut": sc, "menu": [menu], "enabled": crate::menus::ui_enabled(app, id), "ui": true}));
     }
     Value::Array(v)
@@ -78,18 +113,35 @@ pub fn inspect(app: &LightcraftApp, ctx: &egui::Context) -> Value {
         "selection": app.session.selection.ids.iter().map(|p| p.0).collect::<Vec<_>>(),
         "activeMask": app.session.active_mask,
         "widgetCount": app.widgets.len(),
-        "perf": {"frameMs": app.perf.frame_ms, "logicMs": app.perf.logic_ms, "updateMs": app.perf.update_ms, "maxUpdateMs": app.perf.max_update_ms, "fps": app.perf.fps, "lastRenderMs": app.renderer.last_main_ms, "renderQueue": app.renderer.queued(), "rendersInFlight": app.renderer.in_flight(), "pendingSlots": app.renderer.pending_slots(), "mergeRunning": app.merge.busy(), "lastMerge": app.merge.last_result, "rendersDone": app.renderer.completed, "thumbTextures": app.renderer.thumb_textures(), "variantTextures": app.renderer.variant_textures(), "gpu": (lightcraft_engine::gpu::ready() && lightcraft_engine::gpu::available()).then(lightcraft_engine::gpu::adapter_name).flatten(), "gpuReason": lightcraft_engine::gpu::unavailable_reason(), "gpuFallback": lightcraft_engine::gpu::last_fallback()},
-        "loupe": app.loupe_shown.map(|(p, src)| json!({"photo": p.0, "source": src, "pending": app.renderer.is_pending(crate::render::Slot::Main)})),
+        "perf": {"viewFollowed": app.session.view_followed, "viewWorkedOut": app.session.view_worked_out, "frameMs": app.perf.frame_ms, "logicMs": app.perf.logic_ms, "updateMs": app.perf.update_ms, "maxUpdateMs": app.perf.max_update_ms, "fps": app.perf.fps, "lastRenderMs": app.renderer.last_main_ms, "renderQueue": app.renderer.queued(), "rendersInFlight": app.renderer.in_flight(), "pendingSlots": app.renderer.pending_slots(), "mergeRunning": app.merge.busy(), "lastMerge": app.merge.last_result, "rendersDone": app.renderer.completed, "thumbTextures": app.renderer.thumb_textures(), "variantTextures": app.renderer.variant_textures(), "gpu": (lightcraft_engine::gpu::ready() && lightcraft_engine::gpu::available()).then(lightcraft_engine::gpu::adapter_name).flatten(), "gpuReason": lightcraft_engine::gpu::unavailable_reason(), "gpuFallback": lightcraft_engine::gpu::last_fallback()},
+        "loupe": app.loupe_shown.map(|(p, src)| json!({
+            "photo": p.0,
+            "source": src,
+            "pending": app.renderer.is_pending(crate::render::Slot::Main),
+            // why its render failed (the loupe then shows a stand-in, or nothing, for good)
+            "failed": app.renderer.failure_of(crate::render::Slot::Main, p),
+            // zoomed past the whole-frame render: the window rendered at no more than 100 % (pixels of its frame)
+            "region": app.region_view.map(|r| json!({"full": [r.full.0, r.full.1], "window": [r.window.x, r.window.y, r.window.w, r.window.h], "pending": app.renderer.is_pending(crate::render::Slot::Region)})),
+            // …and the same for the Before side of a Before/After view
+            "regionBefore": app.region_before_view.map(|r| json!({"full": [r.full.0, r.full.1], "window": [r.window.x, r.window.y, r.window.w, r.window.h], "pending": app.renderer.is_pending(crate::render::Slot::RegionBefore)})),
+        })),
         "hoverPreview": app.hover_preview.as_ref().map(|h| h.label.clone()),
         "status": app.ui.status,
+        "copied": app.copied,
         "notices": app.notices,
-        "quitPrompt": app.quit_prompt,
+        "quitPrompt": app.quit_prompt.as_ref().map(crate::QuitPrompt::text),
+        // how hard the background face scan may work right now, and why it is judged so (see `panels::faces::scan_pace`)
+        "faceScan": {"pace": app.caches.faces_pace, "focused": app.caches.faces_in_front, "pending": app.caches.faces_pending, "indexed": app.caches.faces_indexed},
         "unsaved": app.session.unsaved().map(|(n, e)| json!({"ops": n, "error": e})),
         "libraryProblem": app.library_problem.as_ref().map(crate::panels::library_problem::LibraryProblem::to_json),
         "scan": app.scan.as_ref().map(crate::import::ScanTask::status),
         "export": {"running": app.export.as_ref().map(crate::export_task::ExportTask::status), "last": app.last_export_result},
         "import": app.import.as_ref().map(crate::import::ImportTask::status),
         "tasks": app.tasks.labels(),
+        // every long-running task in flight, as the activity stack shows them (`activity.list`)
+        "activity": app.session.activity.list(),
+        // commands waiting on a native file dialog shown off the UI thread (`pick`)
+        "fileDialogs": app.pending_picks.iter().map(|p| p.command.clone()).collect::<Vec<_>>(),
         "memory": memory(app),
     })
 }
@@ -175,10 +227,11 @@ pub fn handle(app: &mut LightcraftApp, ctx: &egui::Context, req: &ControlRequest
                 app.synthetic.push(egui::Event::PointerMoved(at));
             } else if req.method == "ui.clickWidget" {
                 let n = p.get("count").and_then(Value::as_u64).unwrap_or(1);
+                let button = if s("button") == Some("right") { egui::PointerButton::Secondary } else { egui::PointerButton::Primary };
                 app.synthetic.push(egui::Event::PointerMoved(at));
                 for _ in 0..n {
-                    app.synthetic.push(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers: m });
-                    app.synthetic.push(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: false, modifiers: m });
+                    app.synthetic.push(egui::Event::PointerButton { pos: at, button, pressed: true, modifiers: m });
+                    app.synthetic.push(egui::Event::PointerButton { pos: at, button, pressed: false, modifiers: m });
                 }
             } else {
                 let to = egui::pos2(
@@ -248,6 +301,26 @@ pub fn handle(app: &mut LightcraftApp, ctx: &egui::Context, req: &ControlRequest
             ctx.request_repaint();
             ok(Value::Null)
         }
+        // what the system does for ⌘X / ⌘C / ⌘V in a text field: paste `text`, or (without it)
+        // what the system clipboard holds
+        "ui.clipboard" => {
+            // outside a text field ⌘C / ⌘V are the app's shortcuts (and the macOS menu bar's):
+            // agents run those as commands (`develop.copy`, `develop.paste`)
+            if !ctx.text_edit_focused() {
+                return err("ui.clipboard: no text field has the focus (click one first)");
+            }
+            match s("action") {
+                Some("cut") => app.synthetic.push(egui::Event::Cut),
+                Some("copy") => app.synthetic.push(egui::Event::Copy),
+                Some("paste") => match s("text") {
+                    Some(text) => app.synthetic.push(egui::Event::Paste(text.to_string())),
+                    None => ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste),
+                },
+                _ => return err("ui.clipboard: `action` is cut, copy or paste"),
+            }
+            ctx.request_repaint();
+            ok(Value::Null)
+        }
         "ui.scroll" => {
             app.synthetic.push(egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
@@ -258,14 +331,48 @@ pub fn handle(app: &mut LightcraftApp, ctx: &egui::Context, req: &ControlRequest
             ctx.request_repaint();
             ok(Value::Null)
         }
+        "ui.zoom" => {
+            let Some(factor) = f("factor").map(|v| v as f32).filter(|v| v.is_finite() && *v > 0.0) else {
+                return err("ui.zoom: factor must be a finite positive number (1 = unchanged)");
+            };
+            app.synthetic.push(egui::Event::Zoom(factor));
+            ctx.request_repaint();
+            ok(Value::Null)
+        }
         "ui.set" => {
+            // an arrangement of the sidebar is checked, not made whole as a settings file's is
+            let sidebar = match p.get("sidebar").map(crate::sidebar::SidebarLayout::parse).transpose() {
+                Ok(s) => s,
+                Err(e) => return err(e),
+            };
             let mut v = serde_json::to_value(&app.ui).unwrap_or_default();
             lightcraft_develop::presets::deep_merge(&mut v, p);
             match serde_json::from_value::<crate::UiState>(v) {
                 Ok(mut u) => {
+                    if let Err(error) = crate::docking::set_widths(&mut u, p) {
+                        return err(error);
+                    }
+                    if let Some(sidebar) = sidebar {
+                        u.sidebar = sidebar;
+                    }
+                    // `collapsedSidebar`, as scripts from before `sidebar` set it: the folded sections
+                    if let Some(ids) = p.get("collapsedSidebar").and_then(Value::as_array) {
+                        use crate::sidebar::SidebarSection;
+                        if p.get("sidebar").is_some() {
+                            return err("ui.set: give `sidebar` or the older `collapsedSidebar`, not both".to_string());
+                        }
+                        if let Some(unknown) = ids.iter().find(|id| id.as_str().and_then(SidebarSection::from_id).is_none()) {
+                            return err(format!("ui.set: `collapsedSidebar`: unknown section {unknown} ({})", SidebarSection::ids()));
+                        }
+                        for section in SidebarSection::ALL {
+                            u.sidebar.set_collapsed(section, ids.iter().any(|id| id.as_str() == Some(section.id())));
+                        }
+                    }
+                    u.collapsed_sidebar.clear();
                     u.toast = app.ui.toast.clone();
                     u.dialog = app.ui.dialog.clone();
                     u.status = app.ui.status.clone();
+                    crate::docking::cancel_replaced_gesture(app, u.docking.as_ref());
                     app.ui = u;
                     crate::i18n::set_language(app.ui.language);
                     ctx.request_repaint();
@@ -277,8 +384,15 @@ pub fn handle(app: &mut LightcraftApp, ctx: &egui::Context, req: &ControlRequest
         "ui.dialog.confirm" => match app.ui.dialog.take() {
             Some(d) => {
                 let r = crate::panels::dialogs::confirm_dialog(app, &d);
-                // the import review stays open on an error, as with its button
-                if (r.is_err() && matches!(d, crate::state::Dialog::Import { .. } | crate::state::Dialog::SamModel { .. }))
+                // the import review and the rule editor stay open on an error, as with their buttons
+                if (r.is_err()
+                    && matches!(
+                        d,
+                        crate::state::Dialog::Import { .. }
+                            | crate::state::Dialog::SamModel { .. }
+                            | crate::state::Dialog::SmartRules { .. }
+                            | crate::state::Dialog::SaveEffect { .. }
+                    ))
                     || (r.is_ok() && crate::panels::dialogs::keeps_open(app, &d))
                 {
                     app.ui.dialog = Some(d);
@@ -292,11 +406,29 @@ pub fn handle(app: &mut LightcraftApp, ctx: &egui::Context, req: &ControlRequest
             ok(Value::Null)
         }
         "ui.resize" => {
+            for name in ["width", "height"] {
+                if p.get(name).is_some() && f(name).is_none() {
+                    return err(format!("ui.resize: {name} must be a number"));
+                }
+            }
             let w = f("width").unwrap_or(1600.0) as f32;
             let h = f("height").unwrap_or(1000.0) as f32;
+            let zoom = ctx.zoom_factor();
+            let native_scale = ctx.input(|i| i.viewport().native_pixels_per_point).unwrap_or_else(|| ctx.pixels_per_point() / zoom);
+            if let Err(e) = crate::headless::resized_viewport([w, h], native_scale, zoom) {
+                return err(e);
+            }
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
             ok(Value::Null)
         }
+        "ui.zoomFactor" => match f("factor") {
+            // egui's interface scale (its keyboard shortcuts are off: Cmd+= / Cmd+- zoom the photo)
+            Some(factor) if factor.is_finite() && (0.5..=3.0).contains(&factor) => {
+                ctx.set_zoom_factor(factor as f32);
+                ok(Value::Null)
+            }
+            _ => err("ui.zoomFactor: factor must be a number from 0.5 to 3"),
+        },
         "ui.screenshot" => {
             // never over a photo's original
             if let Some(Err(e)) = s("path").map(|path| app.session.check_write_target(path)) {
@@ -352,11 +484,8 @@ pub fn default_export_dir() -> String {
 pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String> {
     use lightcraft_engine::export::{Destination, ExportOptions, export_batch};
     let p = &app.session.export_params(p)?;
-    let mut opts = ExportOptions::from_json(p);
-    if let (Some(path), None) = (p.get("path").and_then(Value::as_str), p.get("format")) {
-        let ext = path.rsplit_once('.').map_or("", |(_, e)| e);
-        opts.format = lightcraft_engine::export::ExportFormat::parse(ext).unwrap_or(opts.format);
-    }
+    // the format follows `path` (JPEG when it names none), and `bitDepth` is checked against it
+    let opts = ExportOptions::from_params(p).map_err(|e| e.to_string())?;
     let ids: Vec<_> = match p.get("ids").and_then(Value::as_array) {
         Some(a) => a.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect(),
         None if !app.session.selection.ids.is_empty() => {
@@ -375,7 +504,8 @@ pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String
     // An exact output file needs no folder. A folder given but left blank (the Export dialog's Folder
     // field cleared) is an error, like Lightroom refusing to export to an unspecified folder, rather
     // than a silent write into the working directory. No folder at all (e.g. File → Export with
-    // Preset): the last export's, else the default.
+    // Preset): the last export's, else the default. "Same folder as original photo" needs none:
+    // each photo goes to its own folder.
     let exact = p.get("path").and_then(Value::as_str).filter(|s| !s.trim().is_empty()).map(str::to_string);
     let dir = match p.get("dir").and_then(Value::as_str) {
         Some(d) => d.trim().to_string(),
@@ -385,17 +515,28 @@ pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String
             last_dir.map(str::to_string).unwrap_or_else(default_export_dir)
         }
     };
-    if dir.is_empty() && exact.is_none() {
+    let own_folders = opts.destination_mode == lightcraft_engine::export::DestinationMode::SameAsOriginal;
+    if dir.is_empty() && exact.is_none() && !own_folders {
         return Err(NO_EXPORT_FOLDER.into());
     }
     let to = Destination { dir: dir.clone(), exact };
+    // Add to Apple Photos: refused here, before anything is written, when it can't be done
+    let after = app.session.after_export(&opts)?;
     let background = p.get("background").and_then(Value::as_bool).unwrap_or(false) && app.services.write_shared.is_some();
     let out = if background {
         let items = lightcraft_engine::export::prepare_batch(&mut app.session, &ids, &opts)?;
-        crate::export_task::start(app, items, opts, to)?
+        crate::export_task::start(app, items, opts, to, after)?
     } else {
         let w = app.services.write.as_mut().ok_or("no writer")?;
-        json!({"files": export_batch(&mut app.session, &ids, &opts, &to, &mut |path, bytes| w(path, bytes), &|path| std::path::Path::new(path).exists())?})
+        let files = export_batch(&mut app.session, &ids, &opts, &to, &mut |path, bytes| w(path, bytes), &|path| std::path::Path::new(path).exists())?;
+        let mut out = json!({"files": files});
+        // Photos may take minutes (and waits for the permission prompt): in the desktop app on a
+        // worker, never on this (UI) thread; the app announces the outcome and
+        // `export.photosImports` reports it. A window-less run (snapshot scripts) waits.
+        if let Some(photos) = after.finish(&app.session, &files) {
+            out["applePhotos"] = photos;
+        }
+        out
     };
     // remember for Export with Previous (and to prefill the dialog)
     let mut last = p.clone();

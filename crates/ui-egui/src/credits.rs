@@ -125,7 +125,7 @@ impl Contributor {
 
     /// One line with everything we know, for tooltips.
     pub fn summary(&self) -> String {
-        format!(
+        crate::i18n::tr_format!(
             "@{}: {} PRs, {} commits, +{} / −{} lines (Δ {}), +{} / −{} binary assets, {} – {}",
             self.login,
             self.prs,
@@ -136,7 +136,7 @@ impl Contributor {
             self.binary_added,
             self.binary_deleted,
             day(self.first_commit),
-            day(self.last_commit),
+            day(self.last_commit)
         )
     }
 }
@@ -232,43 +232,47 @@ pub fn contributors_ui(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let id = egui::Id::new("credits_view");
     let mut v = ui.data_mut(|d| d.get_temp::<View>(id)).unwrap_or_default();
     ui.horizontal_wrapped(|ui| {
-        ui.label("Show");
+        ui.label(crate::i18n::tr("Show"));
         for m in NameMode::ALL {
-            if ui.selectable_label(v.names == m, m.label()).clicked() {
+            if ui.selectable_label(v.names == m, crate::i18n::tr(m.label())).clicked() {
                 v.names = m;
             }
         }
         ui.separator();
-        ui.label("Sort");
-        egui::ComboBox::from_id_salt("credits_sort").selected_text(v.key.label().0).show_ui(ui, |ui| {
+        ui.label(crate::i18n::tr("Sort"));
+        crate::widgets::combo_box("credits_sort").selected_text(crate::i18n::tr(v.key.label().0)).show_ui(ui, |ui| {
             for k in SortKey::ALL {
-                if ui.selectable_label(v.key == k, k.label().0).clicked() {
+                if ui.selectable_label(v.key == k, crate::i18n::tr(k.label().0)).clicked() {
                     v.key = k;
                     v.ascending = k.default_ascending();
                 }
             }
         });
-        if ui.button(if v.ascending { "▲" } else { "▼" }).on_hover_text("Reverse the order").clicked() {
+        let reverse =
+            crate::widgets::arrow_button(ui, "", if v.ascending { crate::icons::Icon::ChevronUp } else { crate::icons::Icon::ChevronDown }, false);
+        reverse.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), crate::i18n::tr("Reverse the order")));
+        if reverse.on_hover_text(crate::i18n::tr("Reverse the order")).clicked() {
             v.ascending = !v.ascending;
         }
         ui.separator();
-        let r = ui.selectable_label(!v.table, "Grab bag");
+        let r = ui.selectable_label(!v.table, crate::i18n::tr("Grab bag"));
         crate::widgets::register(ui.ctx(), "button:creditsGrabBag", r.rect);
         if r.clicked() {
             v.table = false;
         }
-        let r = ui.selectable_label(v.table, "Table");
+        let r = ui.selectable_label(v.table, crate::i18n::tr("Table"));
         crate::widgets::register(ui.ctx(), "button:creditsTable", r.rect);
         if r.clicked() {
             v.table = true;
         }
     });
     let list = sorted(CONTRIBUTORS, v.names, v.key, v.ascending);
-    ui.label(RichText::new(format!("{} contributors · {} commits", list.len(), group(TOTAL_COMMITS))).small().color(t.text_dim));
+    ui.label(RichText::new(crate::i18n::tr_format!("{} contributors · {} commits", list.len(), group(TOTAL_COMMITS))).small().color(t.text_dim));
     ui.separator();
-    egui::ScrollArea::both().id_salt("credits_scroll").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
+    let list_h = crate::panels::dialogs::list_height(ui, LIST_HEIGHT);
+    egui::ScrollArea::both().id_salt("credits_scroll").max_height(list_h).auto_shrink([false, true]).show(ui, |ui| {
         if list.is_empty() {
-            ui.label("No contributor data was built into this copy.");
+            ui.label(crate::i18n::tr("No contributor data was built into this copy."));
         } else if v.table {
             table(app, ui, &list, &mut v);
         } else {
@@ -288,8 +292,18 @@ pub fn contributors_ui(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 fn table(app: &mut LightcraftApp, ui: &mut egui::Ui, list: &[&Contributor], v: &mut View) {
     egui::Grid::new("credits_table").striped(true).num_columns(SortKey::ALL.len()).show(ui, |ui| {
         for k in SortKey::ALL {
-            let arrow = if v.key == k { if v.ascending { " ▲" } else { " ▼" } } else { "" };
-            if ui.button(RichText::new(format!("{}{arrow}", k.label().1)).strong()).on_hover_text(k.label().0).clicked() {
+            let text = RichText::new(crate::i18n::tr(k.label().1)).strong();
+            let header = if v.key == k {
+                crate::widgets::arrow_button(
+                    ui,
+                    text,
+                    if v.ascending { crate::icons::Icon::ChevronUp } else { crate::icons::Icon::ChevronDown },
+                    false,
+                )
+            } else {
+                ui.button(text)
+            };
+            if header.on_hover_text(crate::i18n::tr(k.label().0)).clicked() {
                 if v.key == k {
                     v.ascending = !v.ascending;
                 } else {
@@ -318,14 +332,15 @@ fn table(app: &mut LightcraftApp, ui: &mut egui::Ui, list: &[&Contributor], v: &
 /// About ▸ Models: AI models credited in Co-Authored-By trailers.
 pub fn models_ui(ui: &mut egui::Ui) {
     if MODELS.is_empty() {
-        ui.label("No model credits were built into this copy.");
+        ui.label(crate::i18n::tr("No model credits were built into this copy."));
         return;
     }
     let assisted: u64 = MODELS.iter().map(|m| m.commits).max().unwrap_or(0).max(1);
-    egui::ScrollArea::both().id_salt("credits_models_scroll").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
+    let list_h = crate::panels::dialogs::list_height(ui, LIST_HEIGHT);
+    egui::ScrollArea::both().id_salt("credits_models_scroll").max_height(list_h).auto_shrink([false, true]).show(ui, |ui| {
         egui::Grid::new("credits_models").striped(true).num_columns(6).show(ui, |ui| {
             for h in ["Company", "Model", "Version", "Commits", "% of all commits", "Lines +/−"] {
-                ui.label(RichText::new(h).strong());
+                ui.label(RichText::new(crate::i18n::tr(h)).strong());
             }
             ui.end_row();
             for m in MODELS {

@@ -40,11 +40,19 @@ pub fn weekday(iso: &str) -> Option<&'static str> {
 }
 
 /// Shift an ISO time by `secs`, keeping anything after the seconds (fractions, zone) as it was.
-/// A date without a time gets one. `None` if it doesn't parse.
+/// A date without a time gets one. `None` if it doesn't parse, or if the result leaves years
+/// 0000–9999 (an ISO date here has four year digits, so it couldn't be read back); `secs` may be
+/// anything, it never overflows.
 pub fn shift_iso(iso: &str, secs: i64) -> Option<String> {
-    let t = iso_seconds(iso)?;
-    let tail = iso.trim().get(19..).unwrap_or("");
-    Some(format!("{}{tail}", civil(t + secs)))
+    let t = iso_seconds(iso)?.checked_add(secs)?;
+    let (first, last) = (iso_seconds("0000-01-01T00:00:00")?, iso_seconds("9999-12-31T23:59:59")?);
+    if !(first..=last).contains(&t) {
+        return None;
+    }
+    let iso = iso.trim();
+    // the seconds are optional (`10:00+02:00`): without them the tail starts right after the minutes
+    let tail = iso.get(if iso.get(16..17) == Some(":") { 19 } else { 16 }..).unwrap_or("");
+    Some(format!("{}{tail}", civil(t)))
 }
 
 /// Normalize user input to `YYYY-MM-DDTHH:MM:SS` (accepts a space instead of `T`, missing
@@ -155,7 +163,7 @@ impl Catalog {
         let date_of = |id: &PhotoId| -> String {
             let Some(p) = self.photo(*id) else { return String::new() };
             let d = match key {
-                SortKey::CaptureDate => Some(p.date()),
+                SortKey::CaptureDate => p.captured.as_deref(),
                 SortKey::ImportDate => Some(p.imported.as_str()),
                 SortKey::EditDate => p.edited.as_deref(),
                 _ => None,
@@ -204,8 +212,34 @@ mod tests {
         assert_eq!(shift_iso("2026-12-31T23:30:00", 3600).as_deref(), Some("2027-01-01T00:30:00"));
         assert_eq!(shift_iso("2026-03-01T00:00:00.25+02:00", -1).as_deref(), Some("2026-02-28T23:59:59.25+02:00"));
         assert_eq!(shift_iso("nope", 5), None);
+        // hostile shifts never overflow, and a result outside years 0000–9999 (which no ISO date
+        // here can read back) is refused rather than stored
+        for secs in [i64::MAX, i64::MIN, i64::MAX / 2, -(i64::MAX / 2)] {
+            assert_eq!(shift_iso("2026-01-01T00:00:00", secs), None, "{secs}");
+        }
+        assert_eq!(shift_iso("9999-12-31T23:59:59", 1), None);
+        assert_eq!(shift_iso("0000-01-01T00:00:00", -1), None);
+        assert_eq!(shift_iso("9999-12-31T23:59:58", 1).as_deref(), Some("9999-12-31T23:59:59"));
         assert_eq!(normalize_iso("2026-04-01 10:05").as_deref(), Some("2026-04-01T10:05:00"));
         assert_eq!(normalize_iso("2026-02-30"), None);
+    }
+
+    #[test]
+    fn shift_keeps_the_zone_of_a_time_without_seconds() {
+        assert_eq!(shift_iso("2026-01-01T10:00+02:00", 3600).as_deref(), Some("2026-01-01T11:00:00+02:00"));
+        assert_eq!(shift_iso("2026-01-01T10:00Z", 60).as_deref(), Some("2026-01-01T10:01:00Z"));
+        assert_eq!(shift_iso("2026-01-01T10:00", 3600).as_deref(), Some("2026-01-01T11:00:00"));
+        assert_eq!(shift_iso("2026-01-01T10:00:00.5-05:00", 3600).as_deref(), Some("2026-01-01T11:00:00.5-05:00"));
+        assert_eq!(iso_seconds("2026-01-01T10:00+02:00"), iso_seconds("2026-01-01T10:00"));
+    }
+
+    #[test]
+    fn impossible_times_are_rejected_not_rolled_over() {
+        for bad in ["2026-04-01T10:75:00", "2026-04-01 10:00:75", "2026-04-01T10:60", "2026-04-01T24:00:00", "2026-04-01T10:59:60"] {
+            assert_eq!(normalize_iso(bad), None, "{bad}");
+            assert_eq!(shift_iso(bad, 5), None, "{bad}");
+        }
+        assert_eq!(normalize_iso("2026-04-01T23:59:59").as_deref(), Some("2026-04-01T23:59:59"));
     }
 
     #[test]
@@ -222,7 +256,7 @@ mod tests {
         }
         let shape = |r: &[DateRun]| r.iter().map(|r| (r.key.clone(), r.start, r.count)).collect::<Vec<_>>();
         let day = c.date_runs(&ids, SortKey::CaptureDate, GroupBy::Day);
-        // the undated photo falls back to its import date
+        // the undated photo is grouped under Unknown Date
         assert_eq!(
             shape(&day),
             vec![
@@ -230,16 +264,20 @@ mod tests {
                 ("2026-09-29".into(), 2, 1),
                 ("2026-08-01".into(), 3, 1),
                 ("2025-12-31".into(), 4, 1),
-                ("2026-10-01".into(), 5, 1)
+                (String::new(), 5, 1)
             ]
         );
         assert_eq!(day[0].label, "Wednesday, 30 September 2026");
+        assert_eq!(day[4].label, "Unknown Date");
         assert_eq!(c.date_runs(&ids, SortKey::CaptureDate, GroupBy::Auto), day);
         assert_eq!(
-            shape(&c.date_runs(&ids[..5], SortKey::CaptureDate, GroupBy::Month)),
-            vec![("2026-09".into(), 0, 3), ("2026-08".into(), 3, 1), ("2025-12".into(), 4, 1)]
+            shape(&c.date_runs(&ids, SortKey::CaptureDate, GroupBy::Month)),
+            vec![("2026-09".into(), 0, 3), ("2026-08".into(), 3, 1), ("2025-12".into(), 4, 1), (String::new(), 5, 1)]
         );
-        assert_eq!(shape(&c.date_runs(&ids[..5], SortKey::CaptureDate, GroupBy::Year)), vec![("2026".into(), 0, 4), ("2025".into(), 4, 1)]);
+        assert_eq!(
+            shape(&c.date_runs(&ids, SortKey::CaptureDate, GroupBy::Year)),
+            vec![("2026".into(), 0, 4), ("2025".into(), 4, 1), (String::new(), 5, 1)]
+        );
         assert!(c.date_runs(&ids, SortKey::FileName, GroupBy::Day).is_empty());
         assert!(c.date_runs(&ids, SortKey::CaptureDate, GroupBy::None).is_empty());
         // edit date: unedited photos have no date

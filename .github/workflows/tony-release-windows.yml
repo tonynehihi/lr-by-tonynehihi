@@ -1,0 +1,98 @@
+# Tony release helper: build the Windows portable zip for a published release
+# and attach it to that release. This replaces hand cross-building the zip on
+# the maintainer's VM (those builds kept dying to OOM / VM restarts); a real
+# Windows runner builds the native .exe instead.
+#
+# Triggers:
+#   - automatically when a release is published;
+#   - manually (Actions -> "Release Windows portable" -> Run workflow) with a
+#     tag, to backfill the zip for an older release.
+#
+# The zip keeps the established portable layout (as shipped in
+# lr-by-tonynehihi-1.2.0-windows.zip): one top folder "LR by Tonynehihi"
+# holding lightcraft.exe + HUONG-DAN.txt. HUONG-DAN.txt is generated below
+# (there is no canonical Windows copy in the tree — packaging/macos/
+# HUONG-DAN.md is the macOS text); it is the stable how-to-run text without
+# the per-release "what's new" notes, which live in the release notes.
+# The Windows build intentionally does NOT enable the `heif` feature (HEIC
+# decoding goes through macOS `sips`, so it stays macOS-only, exactly like
+# the hand-built Windows zips). The binary is unsigned, as before
+# (SmartScreen note is in HUONG-DAN.txt).
+
+name: Release Windows portable
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build the Windows zip for (e.g. v1.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Resolve release tag
+        id: tag
+        shell: pwsh
+        run: |
+          "tag=${{ github.event.release.tag_name || inputs.tag }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build the app (release)
+        run: cargo build --release --locked -p lightcraft
+
+      - name: Assemble the portable folder and zip it
+        id: pkg
+        shell: pwsh
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          $version = $env:TAG -replace '^v', ''
+          $folder = "LR by Tonynehihi"
+          $stage = Join-Path $env:GITHUB_WORKSPACE "dist/windows/$folder"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item "target/release/lightcraft.exe" $stage
+          $guide = @'
+          Lightroom by Tonynehihi __VERSION__ - Ban Windows
+          ====================================
+
+          Cach dung:
+          1. Giai nen file zip nay ra mot folder.
+          2. Double-click vao lightcraft.exe de chay.
+             (Lan dau Windows co the hien canh bao SmartScreen - bam "More info" roi "Run anyway".)
+
+          Luu y:
+          - Day la ban portable, khong can cai dat.
+          - Thu vien anh mac dinh: Documents\Lightroom by Tony Library (giu nguyen ten
+            cu de khong mat thu vien da co).
+          - Menu Help gon: About, Check for Updates, System Info, Keyboard Shortcuts.
+          - Mo app la tu kiem tra ban moi; tren Windows, app bao ban moi va mo trang
+            release tren GitHub de tai ban moi (tu cai dat chi co tren macOS).
+          - Ban Windows chua doc duoc file HEIC (chi co o ban macOS).
+          - Export HDR: File -> Export -> Format JPEG -> tick "HDR photo" -> HDR boost 1.5
+
+          Ban __VERSION__ | By Tony
+          '@
+          $guide = $guide -replace '__VERSION__', $version
+          Set-Content -Path (Join-Path $stage "HUONG-DAN.txt") -Value $guide -Encoding utf8BOM
+          $asset = "lr-by-tonynehihi-$version-windows.zip"
+          Compress-Archive -Path "dist/windows/$folder" -DestinationPath "dist/windows/$asset"
+          "asset=dist/windows/$asset" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Attach the Windows zip to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.pkg.outputs.asset }}" --clobber

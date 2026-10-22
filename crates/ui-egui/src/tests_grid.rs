@@ -131,3 +131,89 @@ fn grid_headers_selection_scrolling_stacks_and_shape_changes() {
     assert!(after.height() > after.width(), "{after:?}");
     assert_cheap_frames(&mut h);
 }
+
+/// Selected photos whose thumbnails have not loaded (or can't) are still marked selected in the
+/// justified grid (issue #298): the active one white, the others grey.
+#[test]
+fn unloaded_thumbnails_show_their_selection() {
+    let mut h = grid(ViewMode::PhotoGrid);
+    h.request("engine.execute", json!({"command": "library.selectAll"}), T);
+    let img = h.snapshot(SETTLE);
+    assert_eq!(h.view.ctx.pixels_per_point(), 1.0);
+    let active = h.app.session.selection.active.expect("active");
+    let canvas = h.app.canvas_rect.expect("grid drawn");
+    let mut checked = 0;
+    for (w, r) in h.app.widgets.iter().filter(|(w, _)| w.starts_with("thumb:")) {
+        if !canvas.shrink(4.0).contains_rect(*r) || r.min.x < 6.0 {
+            continue;
+        }
+        let id = w.trim_start_matches("thumb:").parse::<u64>().unwrap();
+        let want = if id == active.0 { egui::Color32::WHITE } else { egui::Color32::from_gray(170) };
+        let px = img[((r.min.x - 1.0) as usize, r.center().y as usize)];
+        assert_eq!(px, want, "photo {id}");
+        checked += 1;
+    }
+    assert!(checked >= 3, "checked {checked}");
+}
+
+/// A folder of unedited raws on a slow share: the grid must not decode every raw to draw a 512 px
+/// thumbnail the embedded camera JPEG already covers. Measured on a 56 MB Fuji RAF over a 1.2 MB/s
+/// share, that decode is 45 s a photo, and 149 of them queued in front of the render the user asked
+/// for. The embedded JPEG stays a *stand-in* — replaced by a real render — whenever it is not the
+/// picture the photo should show.
+#[test]
+fn an_unedited_raws_thumbnail_skips_the_sensor_decode() {
+    use crate::panels::grid::skips_the_real_render;
+    // unedited raw, embedded camera JPEG on screen: nothing behind it to render
+    assert!(skips_the_real_render(true, true));
+    // a cached render of the file was the stand-in, even for an unedited raw: the real one follows
+    assert!(!skips_the_real_render(true, false));
+    // edited photo, or a raw with no embedded JPEG: render it
+    assert!(!skips_the_real_render(false, true));
+    assert!(!skips_the_real_render(false, false));
+}
+
+/// Press and release the primary button at `at`, one frame apart from the next click (as a real
+/// double-click comes in: one click per frame).
+fn click_at(h: &mut Headless, at: egui::Pos2) {
+    h.events.push(egui::Event::PointerMoved(at));
+    h.events.push(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.step();
+    h.events.push(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.step();
+}
+
+/// Double-clicking a stack badge expands or collapses the stack, as in Lightroom (issue #2233): its
+/// second click used to undo the first, and the stack stayed as it was. A single click still toggles it.
+#[test]
+fn double_clicking_a_stack_badge_toggles_the_stack_once() {
+    let mut h = grid(ViewMode::PhotoGrid);
+    let top = PhotoId(2001);
+    let sid = StackId(21);
+    let collapsed = |h: &Headless| h.app.session.catalog.stack(sid).unwrap().collapsed;
+    select(&mut h, top);
+    let r = h.request("engine.execute", json!({"command": "stack.toggle", "params": {"ids": [top.0]}}), T);
+    assert_eq!(r["ok"], true, "{r}");
+    h.settle(SETTLE);
+    assert!(collapsed(&h));
+    for want in [false, true] {
+        let badge = widget(&h, &format!("stack:{}", top.0)).expect("stack badge drawn").center();
+        click_at(&mut h, badge);
+        // the first click re-lays the grid; the second must still land on this badge, or the test
+        // would pass without the fix (a missed second click toggles nothing)
+        let moved = widget(&h, &format!("stack:{}", top.0)).expect("stack badge drawn");
+        assert!(moved.contains(badge), "the badge moved from under the pointer: {moved:?}");
+        click_at(&mut h, badge);
+        h.settle(SETTLE);
+        assert_eq!(collapsed(&h), want, "a double-click toggles the stack once");
+        assert_eq!(h.app.ui.view, ViewMode::PhotoGrid, "a double-click on the badge doesn't open the photo");
+        // the next double-click is apart from this one
+        for _ in 0..60 {
+            h.step();
+        }
+    }
+    let badge = widget(&h, &format!("stack:{}", top.0)).unwrap().center();
+    click_at(&mut h, badge);
+    h.settle(SETTLE);
+    assert!(!collapsed(&h), "a single click toggles it");
+}

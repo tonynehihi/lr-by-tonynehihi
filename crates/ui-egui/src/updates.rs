@@ -829,11 +829,11 @@ pub fn about_section(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     if crate::widgets::text_button(ui, "updateDownload", "Download Update", false).clicked() {
                         app.updates.start_download();
                     }
-                } else if crate::widgets::text_button(ui, "updateOpenPage", "Open Release Page", false).clicked() {
-                    if !info.page_url.is_empty() {
-                        let url = info.page_url.clone();
-                        let _ = crate::links::open(app, &url);
-                    }
+                } else if crate::widgets::text_button(ui, "updateOpenPage", "Open Release Page", false).clicked()
+                    && !info.page_url.is_empty()
+                {
+                    let url = info.page_url.clone();
+                    let _ = crate::links::open(app, &url);
                 }
                 if crate::widgets::text_button(ui, "updateCheckAgain", "Check Again", false).clicked() {
                     app.updates.start_check();
@@ -845,11 +845,11 @@ pub fn about_section(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 ui.spinner();
                 ui.label(format!("Downloading update... {:.1} MB", *received as f64 / 1_000_000.0));
             });
-            if let Some(total) = total {
-                if *total > 0 {
-                    let frac = (*received as f64 / *total as f64).clamp(0.0, 1.0) as f32;
-                    ui.add(egui::ProgressBar::new(frac).desired_width(220.0));
-                }
+            if let Some(total) = total
+                && *total > 0
+            {
+                let frac = (*received as f64 / *total as f64).clamp(0.0, 1.0) as f32;
+                ui.add(egui::ProgressBar::new(frac).desired_width(220.0));
             }
         }
         Phase::Downloaded { info, .. } => {
@@ -890,11 +890,11 @@ fn push_span(spans: &mut Vec<(String, bool)>, text: &str, bold: bool) {
     if text.is_empty() {
         return;
     }
-    if let Some((last, b)) = spans.last_mut() {
-        if *b == bold {
-            last.push_str(text);
-            return;
-        }
+    if let Some((last, b)) = spans.last_mut()
+        && *b == bold
+    {
+        last.push_str(text);
+        return;
     }
     spans.push((text.to_string(), bold));
 }
@@ -1016,11 +1016,11 @@ pub fn prompt_window(app: &mut LightcraftApp, ctx: &egui::Context) {
                             if crate::widgets::text_button(ui, "promptUpdateDownload", "Download Update", false).clicked() {
                                 app.updates.start_download();
                             }
-                        } else if crate::widgets::text_button(ui, "promptUpdatePage", "Open Release Page", false).clicked() {
-                            if !info.page_url.is_empty() {
-                                let url = info.page_url.clone();
-                                let _ = crate::links::open(app, &url);
-                            }
+                        } else if crate::widgets::text_button(ui, "promptUpdatePage", "Open Release Page", false).clicked()
+                            && !info.page_url.is_empty()
+                        {
+                            let url = info.page_url.clone();
+                            let _ = crate::links::open(app, &url);
                         }
                         if crate::widgets::text_button(ui, "promptUpdateLater", "Later", false).clicked() {
                             close_remember = true;
@@ -1032,11 +1032,11 @@ pub fn prompt_window(app: &mut LightcraftApp, ctx: &egui::Context) {
                         ui.spinner();
                         ui.label(format!("Downloading update... {:.1} MB", *received as f64 / 1_000_000.0));
                     });
-                    if let Some(total) = total {
-                        if *total > 0 {
-                            let frac = (*received as f64 / *total as f64).clamp(0.0, 1.0) as f32;
-                            ui.add(egui::ProgressBar::new(frac).desired_width(300.0));
-                        }
+                    if let Some(total) = total
+                        && *total > 0
+                    {
+                        let frac = (*received as f64 / *total as f64).clamp(0.0, 1.0) as f32;
+                        ui.add(egui::ProgressBar::new(frac).desired_width(300.0));
                     }
                     ui.add_space(4.0);
                     if crate::widgets::text_button(ui, "promptUpdateHide", "Hide", false).clicked() {
