@@ -35,6 +35,15 @@ jobs:
         with:
           ref: ${{ steps.tag.outputs.tag }}
 
+      # Backfill fix: tags up to v1.3.0 ship a package.sh whose finished-DMG
+      # verification step looks for the upstream bundle name (LightCraft.app)
+      # instead of the rebranded bundle the script actually builds (LrT.app),
+      # so that check always failed and no DMG was ever attached. Point the
+      # checked-out copy at the right bundle name. A no-op for tags that
+      # already carry the fixed script.
+      - name: Fix DMG verify bundle name in checked-out package.sh
+        run: sed -i '' -e 's/LightCraft\.app/LrT.app/g' packaging/macos/package.sh
+
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
