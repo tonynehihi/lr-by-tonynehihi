@@ -296,8 +296,9 @@
   "Already in “{}”": "Ya está en “{}”",
   "Move {n} photo{} to “{}”": "Mover {n} foto{0} a “{1}”",
   "Move {n} photo{} to “{}”?": "¿Mover {n} foto{0} a “{1}”?",
+  "Listing folders — folders: {folders}, files: {files}": "Listando carpetas — carpetas: {folders}, archivos: {files}",
   "Moved {n} photo{} to “{}”. Edit → Undo moves them back.": "{n} foto{0} movida{0} a “{1}”. Editar → Deshacer las devuelve.",
   "{n} change{} saved in memory but not written to disk: {e}\nLightroom by Tonynehihi retries automatically; quitting now would lose {}.": "Cambios guardados en memoria, pero no escritos en el disco: {n}{0:.0}: {e}\nLightCraft vuelve a intentarlo automáticamente; si se sale ahora, se perderán.{1:.0}",
-  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "Cambios guardados solo en memoria: {n}{:.0}: {e}; LightCraft volverá a intentarlo",
-  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft aún no puede decodificar esta variante RAW ({}). Se está editando la vista previa JPEG incrustada de la cámara, que ya incluye el estilo de imagen de la cámara (p. ej. Monocromo) y el balance de blancos."
+  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft aún no puede decodificar esta variante RAW ({}). Se está editando la vista previa JPEG incrustada de la cámara, que ya incluye el estilo de imagen de la cámara (p. ej. Monocromo) y el balance de blancos.",
+  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry"
 }

@@ -296,8 +296,9 @@
   "Renames {n} face{} across the library. The files are not changed.": "ライブラリ全体で{n}件の顔の名前を変更します。ファイルは変更されません。{:.0}",
   "“{to}” is already a person. Combining them makes one person; Undo separates them again.": "「{to}」はすでに別の人物です。まとめると1人になり、元に戻すと再び分かれます。",
   "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "{what}合成を{mp}で追加しました：フルサイズ（{full}）にはこのコンピューターのメモリが足りません",
+  "Listing folders — folders: {folders}, files: {files}": "フォルダーを一覧中 — フォルダー：{folders}、ファイル：{files}",
   "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "{what}合成を{mp}で追加しました。パノラマの最大サイズです（フルサイズ：{full}）",
   "{n} change{} saved in memory but not written to disk: {e}\nLightCraft retries automatically; quitting now would lose {}.": "{n}件の変更{:.0}をディスクに保存できません：{e}\n自動で再試行します。終了すると変更が失われます{:.0}",
-  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "{n}件の変更{:.0}はメモリに保存しましたが、ディスクには書き込めていません：{e} — LightCraftが再試行します",
-  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraftはこのRAWの形式（{}）をまだデコードできません。カメラの埋め込みJPEGプレビューを編集しています。このプレビューには、カメラのピクチャースタイル（モノクロなど）とホワイトバランスがすでに反映されています"
+  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraftはこのRAWの形式（{}）をまだデコードできません。カメラの埋め込みJPEGプレビューを編集しています。このプレビューには、カメラのピクチャースタイル（モノクロなど）とホワイトバランスがすでに反映されています",
+  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry"
 }

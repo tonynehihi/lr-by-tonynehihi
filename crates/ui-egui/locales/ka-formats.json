@@ -296,8 +296,9 @@
   "Already in “{}”": "Already in “{}”",
   "Move {n} photo{} to “{}”": "Move {n} photo{} to “{}”",
   "Move {n} photo{} to “{}”?": "Move {n} photo{} to “{}”?",
+  "Listing folders — folders: {folders}, files: {files}": "საქაღალდეების ჩამოთვლა — საქაღალდეები: {folders}, ფაილები: {files}",
   "Moved {n} photo{} to “{}”. Edit → Undo moves them back.": "Moved {n} photo{} to “{}”. Edit → Undo moves them back.",
   "{n} change{} saved in memory but not written to disk: {e}\nLightroom by Tonynehihi retries automatically; quitting now would lose {}.": "ცვლილება შენახულია მეხსიერებაში, მაგრამ დისკზე არ ჩაწერილა: {n}{:.0}: {e}\nLightCraft ავტომატურად ცდილობს ხელახლა; ახლა გასვლით ისინი დაიკარგება.{:.0}",
-  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "ცვლილება შენახულია მეხსიერებაში, მაგრამ დისკზე არ ჩაწერილა: {n}{:.0}: {e} — LightCraft ხელახლა სცდის",
-  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft ჯერ ვერ დეკოდირებს RAW-ის ამ ვარიანტს ({}). თქვენ არედაქტირებთ კამერის ჩაშენებულ JPEG-ხედს, რომელიც უკვე შეიცავს კამერის გამოსახულების სტილს (მაგ., მონოქრომულს) და თეთრის ბალანსს."
+  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft ჯერ ვერ დეკოდირებს RAW-ის ამ ვარიანტს ({}). თქვენ არედაქტირებთ კამერის ჩაშენებულ JPEG-ხედს, რომელიც უკვე შეიცავს კამერის გამოსახულების სტილს (მაგ., მონოქრომულს) და თეთრის ბალანსს.",
+  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry"
 }

@@ -296,6 +296,7 @@
   "Already in “{}”": "Již v „{}“",
   "Move {n} photo{} to “{}”": "Přesunout do „{1}“ fotografie: {n}{0:.0}",
   "Move {n} photo{} to “{}”?": "Přesunout do „{1}“ fotografie: {n}{0:.0}?",
+  "Listing folders — folders: {folders}, files: {files}": "Procházení složek – složky: {folders}, soubory: {files}",
   "Moved {n} photo{} to “{}”. Edit → Undo moves them back.": "Do „{1}“ přesunuto fotografií: {n}{0:.0}. Úpravy → Zpět je vrátí.",
   "{n} change{} saved in memory but not written to disk: {e}\nLightroom by Tonynehihi retries automatically; quitting now would lose {}.": "Změny uložené v paměti, ale nezapsané na disk: {n}{0:.0}: {e}\nLightCraft zápis automaticky opakuje; při ukončení nyní se tyto změny ztratí.{1:.0}",
   "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "Změny uložené v paměti, ale nezapsané na disk: {n}{:.0}: {e} — LightCraft zápis zopakuje",

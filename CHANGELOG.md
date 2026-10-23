@@ -2,6 +2,14 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.4.0
+
+- **SYNCED WITH UPSTREAM LIGHTCRAFT v0.13.0**: the whole app moves up to upstream 0.13.0 — **VIETNAMESE INTERFACE** (the app now speaks Vietnamese), **GUIDED UPRIGHT** for straightening tilted shots with guide lines, **GPU DENOISE ON MORE HARDWARE** (DirectX 12, including NVIDIA Pascal cards), **MINOLTA MRW** raw decoding, and a **CLI SECURITY FIX**, plus upstream's fixes and polish since 0.11.
+- **PHOTO › SHOW IN FOLDERS**: jump straight from any photo to where it lives in the Folders panel.
+- **IMPORT KEEPS YOUR FOLDER STRUCTURE**: importing now preserves your existing album/folder organisation instead of landing everything flat.
+
+— **tonynehihi**
+
 ## 1.3.1
 
 - **IN-APP UPDATE FIXED**: updating to 1.3.0 from inside the app always failed at the very last step — the macOS packaging script verified the finished disk image against the wrong bundle name and rejected a perfectly good build, so everyone on 1.2.0 / 1.1.x hit the same wall. The script now checks the bundle it actually builds (**LrT.app**). **Update straight to 1.3.1 in the app** (Help → Check for Updates) — no manual install needed; your library, settings and photos are untouched.

@@ -296,8 +296,9 @@
   "Renames {n} face{} across the library. The files are not changed.": "在整个图库中重命名 {n} 张面孔。不会改动文件。{:.0}",
   "“{to}” is already a person. Combining them makes one person; Undo separates them again.": "“{to}”已经是另一个人。合并后成为一个人；撤销会再把他们分开。",
   "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "已添加 {what} 合并（{mp}）：完整尺寸（{full}）所需的内存超出了这台电脑的内存",
+  "Listing folders — folders: {folders}, files: {files}": "正在列出文件夹 — 文件夹：{folders}，文件：{files}",
   "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "已添加 {what} 合并（{mp}），这是全景图的最大尺寸（完整尺寸：{full}）",
   "{n} change{} saved in memory but not written to disk: {e}\nLightCraft retries automatically; quitting now would lose {}.": "{n} 项更改已保存在内存中，但尚未写入磁盘：{e}\nLightCraft 会自动重试；现在退出将丢失这些更改。{0:.0}{1:.0}",
-  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "{n} 项更改{0:.0}已保存在内存中，但未写入磁盘：{e} — LightCraft 会重试",
-  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft 暂时无法解码这种 RAW 变体（{0}）。你正在编辑相机内嵌的 JPEG 预览，其中已包含相机的照片风格（如单色）和白平衡。"
+  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft 暂时无法解码这种 RAW 变体（{0}）。你正在编辑相机内嵌的 JPEG 预览，其中已包含相机的照片风格（如单色）和白平衡。",
+  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry"
 }

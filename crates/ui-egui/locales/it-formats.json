@@ -297,7 +297,8 @@
   "Move {n} photo{} to “{}”": "Sposta foto in “{1}” ({n}){0:.0}",
   "Move {n} photo{} to “{}”?": "Spostare le foto in “{1}” ({n})?{0:.0}",
   "Moved {n} photo{} to “{}”. Edit → Undo moves them back.": "Foto spostate in “{1}”: {n}{0:.0}. Modifica → Annulla le riporta indietro.",
+  "Listing folders — folders: {folders}, files: {files}": "Elenco delle cartelle — cartelle: {folders}, file: {files}",
   "{n} change{} saved in memory but not written to disk: {e}\nLightroom by Tonynehihi retries automatically; quitting now would lose {}.": "Modifiche salvate in memoria ma non scritte sul disco: {n}{0:.0}: {e}\nLightCraft riprova da solo; se esci ora, andranno perse.{1:.0}",
-  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "Modifiche salvate solo in memoria: {n}{:.0}: {e}; LightCraft riproverà",
-  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft non sa ancora decodificare questa variante raw ({}). Stai modificando l'anteprima JPEG incorporata dalla fotocamera, che contiene già lo stile immagine della fotocamera (ad es. Monocromatico) e il bilanciamento del bianco."
+  "Lightroom by Tonynehihi can't decode this raw variant yet ({}). You're editing the camera's embedded JPEG preview, which already includes the camera's picture style (e.g. Monochrome) and white balance.": "LightCraft non sa ancora decodificare questa variante raw ({}). Stai modificando l'anteprima JPEG incorporata dalla fotocamera, che contiene già lo stile immagine della fotocamera (ad es. Monocromatico) e il bilanciamento del bianco.",
+  "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry": "{n} change{} saved in memory but not written to disk: {e} — Lightroom by Tonynehihi will retry"
 }
