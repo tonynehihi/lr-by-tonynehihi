@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build, sign and (optionally) notarize the macOS release artifacts:
 #
-#   $DIST/lightcraft-<version>-macos-<arch>.dmg          LightCraft.app on a drag-to-Applications DMG
+#   $DIST/lr-by-tonynehihi-<version>-macos-<arch>.dmg    LrT.app on a drag-to-Applications DMG
 #   $DIST/lightcraft-cli-<version>-macos-<arch>.zip      the headless CLI
 #
 # Usage: packaging/macos/package.sh [--arch universal|aarch64|x86_64] [--skip-build]
@@ -189,27 +189,28 @@ codesign --verify --strict --verbose=2 "$DMG"
 # Signatures of the DMG container alone do not validate the bundle in the image.
 verify_dmg_app() {
   local mount="$WORK/dmg-verify-mount" copy="$WORK/dmg-verify-copy" rc=0
+  local app_name="$(basename "$APP")"
   mkdir -p "$mount" "$copy"
   if ! hdiutil_retry attach -readonly -nobrowse -noautoopen -mountpoint "$mount" "$DMG" >/dev/null; then
     echo "error: unable to mount finished $DMG" >&2
     hdiutil detach "$mount" >/dev/null 2>&1 || true
     return 1
   fi
-  echo "==> strict codesign of LightCraft.app in finished DMG"
-  codesign --verify --deep --strict --verbose=2 "$mount/LightCraft.app" || rc=1
+  echo "==> strict codesign of $app_name in finished DMG"
+  codesign --verify --deep --strict --verbose=2 "$mount/$app_name" || rc=1
   if [ "$rc" = 0 ]; then
-    ditto "$mount/LightCraft.app" "$copy/LightCraft.app" || rc=1
+    ditto "$mount/$app_name" "$copy/$app_name" || rc=1
   fi
   if [ "$rc" = 0 ]; then
-    echo "==> strict codesign of LightCraft.app after ditto install-copy"
-    codesign --verify --deep --strict --verbose=2 "$copy/LightCraft.app" || rc=1
+    echo "==> strict codesign of $app_name after ditto install-copy"
+    codesign --verify --deep --strict --verbose=2 "$copy/$app_name" || rc=1
   fi
   if [ "$rc" = 0 ] && [ "$NOTARIZE" = 1 ]; then
-    spctl --assess --type execute -vvv "$copy/LightCraft.app" || rc=1
+    spctl --assess --type execute -vvv "$copy/$app_name" || rc=1
   fi
   if [ "$rc" != 0 ]; then
     echo "error: published-image app verification failed; reject $DMG" >&2
-    xattr -lr "$mount/LightCraft.app" >&2 || true
+    xattr -lr "$mount/$app_name" >&2 || true
   fi
   if ! hdiutil_retry detach "$mount" >/dev/null; then
     echo "error: could not detach verification mount" >&2
