@@ -2,6 +2,13 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.3.1
+
+- **IN-APP UPDATE FIXED**: updating to 1.3.0 from inside the app always failed at the very last step — the macOS packaging script verified the finished disk image against the wrong bundle name and rejected a perfectly good build, so everyone on 1.2.0 / 1.1.x hit the same wall. The script now checks the bundle it actually builds (**LrT.app**). **Update straight to 1.3.1 in the app** (Help → Check for Updates) — no manual install needed; your library, settings and photos are untouched.
+- **NOTHING ELSE CHANGES**: this is a packaging-only hotfix — the app itself is identical to 1.3.0 (upstream LightCraft v0.11.0).
+
+— **tonynehihi**
+
 ## 1.3.0
 
 - **SYNCED WITH UPSTREAM LIGHTCRAFT v0.11.0**: the whole app moves up to upstream 0.11.0 — **LOSSY DNG SUPPORT** (lossy DNG files open natively, including JPEG XL-compressed raws), **SAM 3 WITH CPU FALLBACK** (AI masking works even without a GPU), **DETAIL FIT** rendering, two new interface languages (**Czech** and **Simplified Chinese**), and upstream's fixes and polish since 0.10.
