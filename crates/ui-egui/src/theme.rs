@@ -44,6 +44,9 @@ pub struct Tokens {
     pub grid_bg: Color32,
     pub cell: Color32,
     pub cell_selected: Color32,
+    /// A thumbnail's place while its picture is still being made: static, apart from the grid, the
+    /// cells and the canvas in every theme.
+    pub skeleton: Color32,
     pub divider: Color32,
     pub inset: Color32,
     pub field: Color32,
@@ -125,6 +128,7 @@ impl Default for Tokens {
             grid_bg: Color32::from_rgb(0x1f, 0x1f, 0x21),
             cell: Color32::from_rgb(0x2d, 0x2e, 0x30),
             cell_selected: Color32::from_rgb(0x35, 0x36, 0x3a),
+            skeleton: Color32::from_rgb(0x40, 0x40, 0x40), // Charcoal placeholder: 0x25 was 1.07:1 vs the fork's grid_bg, under the 1.1 floor
             divider: Color32::from_rgb(0x2d, 0x2e, 0x30),
             inset: Color32::from_rgb(0x26, 0x26, 0x28),
             field: Color32::from_rgb(0x2d, 0x2e, 0x30),
@@ -172,6 +176,7 @@ impl Tokens {
                 grid_bg: rgb(0x080808),
                 cell: rgb(0x121212),
                 cell_selected: rgb(0x262626),
+                skeleton: rgb(0x1d1d1d),
                 divider: rgb(0x0e0e0e),
                 inset: rgb(0x181818),
                 field: rgb(0x161616),
@@ -189,6 +194,7 @@ impl Tokens {
                 grid_bg: rgb(0xd9d9d9),
                 cell: rgb(0xcbcbcb),
                 cell_selected: rgb(0xb4b4b4),
+                skeleton: rgb(0xa6a6a6),
                 divider: rgb(0xc4c4c4),
                 inset: rgb(0xdcdcdc),
                 field: rgb(0xf6f6f6),
@@ -219,6 +225,7 @@ impl Tokens {
                 grid_bg: rgb(0xe2e5e9),
                 cell: rgb(0xffffff),
                 cell_selected: rgb(0xe8f0fe),
+                skeleton: rgb(0xbcbcbc),
                 divider: rgb(0xdadce0),
                 inset: rgb(0xf1f3f4),
                 field: rgb(0xffffff),

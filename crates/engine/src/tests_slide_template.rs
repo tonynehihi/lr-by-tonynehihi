@@ -231,7 +231,7 @@ fn bad_files_are_reported_and_skipped() {
         ("binary.json", vec![0xff, 0xfe, 0x00, 0x01], "not UTF-8"),
         ("array.json", b"[1, 2]".to_vec(), "not a JSON object"),
         ("preset.json", br#"{"format": "lightcraft.preset", "version": 1}"#.to_vec(), "format `lightcraft.preset`"),
-        ("newer.json", doc(json!({"version": 2})), "newer LightCraft"),
+        ("newer.json", doc(json!({"version": 2})), "newer Lightroom by Tonynehihi"),
         ("noversion.json", br#"{"format": "lightcraft.slideshowTemplate"}"#.to_vec(), "no `version`"),
         ("badversion.json", doc(json!({"version": -1})), "`version`"),
         ("unknown.json", doc(json!({"music": {}})), "unknown key `music`"),

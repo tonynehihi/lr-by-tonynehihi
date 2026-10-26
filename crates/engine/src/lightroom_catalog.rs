@@ -677,7 +677,7 @@ pub(crate) fn refuse_non_media(data: &mut CatalogImport) {
         if !refused.contains(&p.source_id) {
             return true;
         }
-        warnings.push(format!("image {}: not imported; {} isn't one of the file types LightCraft reads", p.source_id, p.path));
+        warnings.push(format!("image {}: not imported; {} isn't one of the file types Lightroom by Tonynehihi reads", p.source_id, p.path));
         false
     });
     data.warnings.extend(warnings);
@@ -1178,7 +1178,7 @@ mod tests {
         assert_eq!(r["photos"], 2, "only the real master and its copy: {r}");
         assert!(s.catalog.photos().all(|p| !matches!(&p.source, Source::File { path } if path.ends_with(".exe"))), "the program was catalogued");
         let warnings = r["warnings"].to_string();
-        assert!(warnings.contains("payload.exe") && warnings.contains("file types LightCraft reads"), "{warnings}");
+        assert!(warnings.contains("payload.exe") && warnings.contains("file types Lightroom by Tonynehihi reads"), "{warnings}");
         assert!(warnings.contains("image 4: not imported"), "the virtual copy of the refused original goes with it: {warnings}");
     }
 

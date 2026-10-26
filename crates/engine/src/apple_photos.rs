@@ -173,8 +173,8 @@ fn error_number(stderr: &str) -> Option<i64> {
 /// What to tell the user when osascript failed importing into `album`.
 pub fn explain(out: &Output, album: &str) -> String {
     match error_number(&out.stderr) {
-        Some(-1743 | -1744) => "LightCraft isn't allowed to control Photos. Allow it in System Settings › Privacy & Security › Automation \
-             (turn on Photos under LightCraft, or under your terminal app for lightcraft-cli), then try again."
+        Some(-1743 | -1744) => "Lightroom by Tonynehihi isn't allowed to control Photos. Allow it in System Settings › Privacy & Security › Automation \
+             (turn on Photos under Lightroom by Tonynehihi, or under your terminal app for lightcraft-cli), then try again."
             .into(),
         Some(-600 | -10810 | -10814) => "Apple Photos couldn't be found or opened on this Mac.".into(),
         Some(-128) => "The import was cancelled in Photos.".into(),

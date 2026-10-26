@@ -25,7 +25,7 @@
 //! - Browser storage (OPFS) has no file locks: see the web host for its own guard.
 
 use std::fs::{File, OpenOptions, TryLockError};
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 /// The lock file in the library directory.
@@ -59,9 +59,9 @@ impl LockOwner {
         }
     }
 
-    /// "LightCraft 0.3.0 (process 123 on studio-mac)".
+    /// "Lightroom by Tonynehihi 0.3.0 (process 123 on studio-mac)".
     pub fn describe(&self) -> String {
-        let program = if self.program.is_empty() { "another LightCraft" } else { self.program.as_str() };
+        let program = if self.program.is_empty() { "another Lightroom by Tonynehihi" } else { self.program.as_str() };
         let version = if self.version.is_empty() { String::new() } else { format!(" {}", self.version) };
         let host = if self.host.is_empty() {
             String::new()
@@ -83,7 +83,7 @@ fn host_name() -> String {
 #[derive(Debug, thiserror::Error)]
 pub enum LockError {
     /// Another process has the library open.
-    #[error("This library is already open in {}. Close it there first.", .0.as_ref().map(LockOwner::describe).unwrap_or_else(|| "another LightCraft program".into()))]
+    #[error("This library is already open in {}. Close it there first.", .0.as_ref().map(LockOwner::describe).unwrap_or_else(|| "another Lightroom by Tonynehihi program".into()))]
     InUse(Option<LockOwner>),
 }
 
@@ -116,9 +116,11 @@ impl LibraryLock {
             }
             Err(TryLockError::Error(e)) => return Ok(unlocked(e)),
         }
+        // A new file in place of whatever is at the name: a link planted there in a library folder
+        // someone else prepared is removed, never written through (as for the staging files, #1502).
         let owner = LockOwner::this_process(program);
         if let Ok(json) = serde_json::to_vec_pretty(&owner)
-            && let Err(e) = std::fs::write(dir.join(OWNER), json)
+            && let Err(e) = crate::store::create_staging(&dir.join(OWNER)).and_then(|mut f| f.write_all(&json))
         {
             log::warn!("library {}: can't write {OWNER}: {e}", dir.display());
         }

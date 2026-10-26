@@ -354,7 +354,7 @@ fn download(s: &mut Session, p: &Value) -> Result<Value> {
     let id = str_param(p, "id").ok_or_else(|| bad(C, "missing `id`"))?;
     let dir = models_dir(s, C)?;
     refresh_catalog(s);
-    let spec = download_spec(s, id).ok_or_else(|| bad(C, "LightCraft has no download for that model: get the file from its page, then add it"))?;
+    let spec = download_spec(s, id).ok_or_else(|| bad(C, "Lightroom by Tonynehihi has no download for that model: get the file from its page, then add it"))?;
     if cfg!(target_arch = "wasm32") {
         return Err(bad(C, "the web build downloads no models"));
     }

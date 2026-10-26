@@ -122,8 +122,8 @@ fn identify(path: &Path, c: &str, sha_known: Option<&str>) -> Result<Source> {
     }
     Err(bad(
         c,
-        "LightCraft does not know this file. A denoise model is an .onnx file with a denoise-model.json beside it that says how to use it \
-         (see docs/denoise.md), or an archive LightCraft can fetch itself (`denoise.models.download`)",
+        "Lightroom by Tonynehihi does not know this file. A denoise model is an .onnx file with a denoise-model.json beside it that says how to use it \
+         (see docs/denoise.md), or an archive Lightroom by Tonynehihi can fetch itself (`denoise.models.download`)",
     ))
 }
 
@@ -309,10 +309,10 @@ fn inspect(s: &mut Session, p: &Value) -> Result<Value> {
             "denoise-model.json could not be read or is too large"
         } else if src.with_file_name("model.json").is_file() {
             // other apps ship their models with a model.json of their own (#1381)
-            "No denoise-model.json beside this .onnx file. The model.json there is another app's description, which LightCraft \
+            "No denoise-model.json beside this .onnx file. The model.json there is another app's description, which Lightroom by Tonynehihi \
              does not read: it needs its own denoise-model.json (see docs/denoise.md)"
         } else {
-            "No denoise-model.json beside this .onnx file: LightCraft needs one that says how to use the model (see docs/denoise.md)"
+            "No denoise-model.json beside this .onnx file: Lightroom by Tonynehihi needs one that says how to use the model (see docs/denoise.md)"
         };
         return Err(bad(C, why));
     };
@@ -364,8 +364,8 @@ fn download(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "denoise.models.download";
     let id = str_param(p, "id").ok_or_else(|| bad(C, "missing `id`"))?;
     let dir = models_dir(s, C)?;
-    let k = known::find(id).ok_or_else(|| bad(C, "LightCraft has no download for that model: get the file from its page, then add it"))?;
-    let spec = k.download.clone().ok_or_else(|| bad(C, "LightCraft has no download for that model: get the file from its page, then add it"))?;
+    let k = known::find(id).ok_or_else(|| bad(C, "Lightroom by Tonynehihi has no download for that model: get the file from its page, then add it"))?;
+    let spec = k.download.clone().ok_or_else(|| bad(C, "Lightroom by Tonynehihi has no download for that model: get the file from its page, then add it"))?;
     if !cfg!(feature = "denoise") {
         return Err(bad(C, "this build cannot run denoise models, so there is nothing to download for it"));
     }

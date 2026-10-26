@@ -3,7 +3,7 @@
 //!
 //! Adding a model is: pick or drop a `.onnx` file → the engine inspects it (`faces.models.inspect`) →
 //! this dialog shows what it is and its terms → the user ticks "I accept" → `faces.models.install`.
-//! LightCraft fetches a model only when the user presses Download on a model it has a pinned address for: the
+//! Lightroom by Tonynehihi fetches a model only when the user presses Download on a model it has a pinned address for: the
 //! same dialog shows its terms first, and accepting them downloads it (`faces.models.download`: checked against its
 //! size and SHA-256), installs it, starts using it and switches recognition on, with no further question. "Open
 //! page" opens the model's own page in the browser for anything else.
@@ -190,6 +190,9 @@ fn gpu_section(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, gpu: &Val
         };
         ui.horizontal(|ui| {
             ui.label(RichText::new(crate::i18n::tr(label)).color(t.text_dim));
+            if st["checking"] == true {
+                crate::progress::spinner(ui, 12.0);
+            }
             let r = ui.label(text);
             register(ui.ctx(), format!("faces:device:{what}"), r.rect);
             if let Some(why) = why {
@@ -312,10 +315,7 @@ fn scan_progress(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens) {
         return;
     }
     let text = format!("Scanning photos for faces: {left} left · {faces} faces so far");
-    let bar = ui.add(
-        egui::ProgressBar::new((1.0 - left as f32 / peak as f32).clamp(0.0, 1.0)).desired_width(380.0).text(RichText::new(text).font(t.font(11.5))),
-    );
-    register(ui.ctx(), "faces:scanProgress", bar.rect);
+    crate::progress::Progress::new(Some(1.0 - left as f32 / peak as f32)).label(text).widget("faces:scanProgress").show(ui);
 }
 
 fn model_row(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, m: &Value, dl: Option<&Value>, can_run: bool) {
@@ -361,17 +361,22 @@ fn model_row(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, m: &Value, 
                 match (dl_state, dl) {
                     (Some("running"), Some(d)) => {
                         let (got, total) = (d["bytes"].as_u64().unwrap_or(0), d["total"].as_u64().unwrap_or(0));
-                        let frac = if total > 0 { (got as f32 / total as f32).clamp(0.0, 1.0) } else { 0.0 };
                         let text = if total > 0 && got >= total {
                             "Checking…".to_string()
                         } else {
                             format!("{} of {} from {host}", mb(Some(got)), mb(Some(total)))
                         };
-                        let bar = ui.add(egui::ProgressBar::new(frac).desired_width(260.0).text(RichText::new(text).font(t.font(11.5))));
-                        register(ui.ctx(), format!("faces:progress:{id}"), bar.rect);
+                        crate::progress::Progress::new(crate::progress::fraction_of(got, total))
+                            .label(text)
+                            .width(crate::progress::ROW_WIDTH.min(ui.available_width()))
+                            .widget(format!("faces:progress:{id}"))
+                            .show(ui);
                     }
                     (Some("done"), _) => {
-                        ui.label(RichText::new(crate::i18n::tr("Downloaded and checked. Installing…")).font(t.font(11.5)).color(t.text_dim));
+                        ui.horizontal(|ui| {
+                            crate::progress::spinner(ui, 12.0);
+                            ui.label(RichText::new(crate::i18n::tr("Downloaded and checked. Installing…")).font(t.font(11.5)).color(t.text_dim));
+                        });
                     }
                     (Some("failed"), Some(d)) => {
                         let why = sentence(d["error"].as_str().unwrap_or("The download failed"));
@@ -448,7 +453,7 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
         ui.label(RichText::new(crate::i18n::tr("This file cannot be used yet")).font(t.semibold(13.5)).color(t.caution));
         ui.add(
             egui::Label::new(
-                RichText::new(sentence(info["reason"].as_str().unwrap_or("It is not a face recognition model LightCraft understands")))
+                RichText::new(sentence(info["reason"].as_str().unwrap_or("It is not a face recognition model Lightroom by Tonynehihi understands")))
                     .color(t.text_label),
             )
             .wrap(),
@@ -471,7 +476,7 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
         ui.add(
             egui::Label::new(
                 RichText::new(format!(
-                    "Downloads from {host}. Once it has arrived and checked out, LightCraft installs it{}.",
+                    "Downloads from {host}. Once it has arrived and checked out, Lightroom by Tonynehihi installs it{}.",
                     if detector { "" } else { ", starts using it and turns face recognition on" }
                 ))
                 .color(t.text_label),
@@ -493,7 +498,7 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
     }
     if kind == "draft" {
         ui.add_space(2.0);
-        ui.label(RichText::new(crate::i18n::tr("LightCraft does not know this model, so it assumed:")).color(t.text_label));
+        ui.label(RichText::new(crate::i18n::tr("Lightroom by Tonynehihi does not know this model, so it assumed:")).color(t.text_label));
         for a in info["assumptions"].as_array().into_iter().flatten().filter_map(Value::as_str) {
             ui.add(egui::Label::new(RichText::new(format!("•  {a}")).font(t.font(12.0)).color(t.text_dim)).wrap());
         }
@@ -508,9 +513,9 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
     ui.add_space(4.0);
     check(ui, "faceModel.accept", accepted, "I have read these terms and accept them for my own use");
     let closing = if download {
-        "Nothing is fetched until you accept. The model is kept on this computer only; LightCraft never uploads or shares it."
+        "Nothing is fetched until you accept. The model is kept on this computer only; Lightroom by Tonynehihi never uploads or shares it."
     } else {
-        "The model is kept on this computer only. LightCraft never uploads or shares it."
+        "The model is kept on this computer only. Lightroom by Tonynehihi never uploads or shares it."
     };
     ui.label(RichText::new(closing).font(t.font(11.5)).color(t.text_dim));
 }

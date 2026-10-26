@@ -78,7 +78,7 @@ fn each_part_of_a_lightroom_catalog_is_refused() {
         refused(&root, &p, &catalog);
     }
     let e = Session::new().open_library(&dir, false).unwrap_err().to_string();
-    assert!(e.contains("Lightroom Classic catalog, not a LightCraft library") && e.contains("Import Lightroom Catalog"), "{e}");
+    assert!(e.contains("Lightroom Classic catalog, not a Lightroom by Tonynehihi library") && e.contains("Import Lightroom Catalog"), "{e}");
     let _ = std::fs::remove_dir_all(&root);
 }
 

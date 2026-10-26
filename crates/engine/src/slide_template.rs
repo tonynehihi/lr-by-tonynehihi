@@ -209,7 +209,7 @@ pub fn parse(bytes: &[u8]) -> Result<Parsed, String> {
         Some(v) => match v.as_u64() {
             Some(n) if n > VERSION => {
                 return Err(format!(
-                    "made by a newer LightCraft (template version {n}; this one reads version {VERSION}): update LightCraft to use it"
+                    "made by a newer Lightroom by Tonynehihi (template version {n}; this one reads version {VERSION}): update Lightroom by Tonynehihi to use it"
                 ));
             }
             Some(n) if n >= 1 => {}
@@ -380,7 +380,7 @@ fn read_dir(dir: &Path, out: &mut Listing) {
 fn read_user(file: &str, path: &Path) -> Result<Template, String> {
     let stem = file.get(..file.len().saturating_sub(5)).unwrap_or_default();
     if file_stem(stem).as_deref() != Some(stem) {
-        return Err("the file name isn't one LightCraft makes (letters, digits, spaces, - _ ( ) only); rename the file".into());
+        return Err("the file name isn't one Lightroom by Tonynehihi makes (letters, digits, spaces, - _ ( ) only); rename the file".into());
     }
     let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
     if !meta.file_type().is_file() {
@@ -472,7 +472,7 @@ impl Session {
             }));
         }
         if id.starts_with(USER) && user_stem(id).is_none() {
-            return Err(format!("`{id}` isn't a template id (user templates are `user:` and a file name LightCraft made)"));
+            return Err(format!("`{id}` isn't a template id (user templates are `user:` and a file name Lightroom by Tonynehihi made)"));
         }
         self.slide_templates().get(id).cloned().ok_or_else(|| format!("no slideshow template `{id}`"))
     }

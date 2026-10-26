@@ -3,8 +3,10 @@
 //! Usage: `lightcraft [--library DIR | --memory] [--no-demo] [--control <port>] [files or folders…]`
 //!
 //! The library (catalog, presets, thumbnail cache) lives in `--library DIR`, else
-//! `$LIGHTCRAFT_LIBRARY`, else the library last opened with Settings → Open Library…, else
-//! `~/Pictures/Lightroom by Tony Library`; a new library starts with the
+//! `$LIGHTCRAFT_LIBRARY`, else — with Settings ▸ General ▸ At launch set to *Ask me*, or Alt/Option
+//! held as the window appears — the one chosen in a list of the recent libraries, else the library
+//! last opened, else `~/Pictures/Lightroom by Tony Library`
+//! ([`lightcraft_ui_egui::panels::library_problem::launch_plan`]); a new library starts with the
 //! procedural demo photos unless `--no-demo` or files are given. Files and folders on the command
 //! line are imported (duplicates are skipped). `--memory` runs an in-memory session that writes
 //! nothing (demo photos unless files are given; used by the README showcase scripts). A library
@@ -39,7 +41,7 @@ mod window_gpu;
 
 use dialog_filter::FileDialogExt as _;
 use lightcraft_engine::Session;
-use lightcraft_ui_egui::panels::library_problem::LibraryProblem;
+use lightcraft_ui_egui::panels::library_problem::{Launch, LibraryProblem};
 use lightcraft_ui_egui::{LightcraftApp, Services, UiState};
 
 /// Reverse-DNS app id: Wayland app id, `.desktop` file and hicolor icon name.
@@ -158,8 +160,8 @@ fn gpu_crash_check_at(marker: Option<std::path::PathBuf>, in_memory: bool) -> Op
 
 fn gpu_crash_notice(what: &str) -> String {
     format!(
-        "LightCraft closed unexpectedly while starting the GPU last time ({what}), so GPU rendering is now off and photos render on the CPU. \
-         To try the GPU again, turn on Settings ▸ Performance ▸ Use the GPU for rendering; to try another graphics backend, start LightCraft with \
+        "Lightroom by Tonynehihi closed unexpectedly while starting the GPU last time ({what}), so GPU rendering is now off and photos render on the CPU. \
+         To try the GPU again, turn on Settings ▸ Performance ▸ Use the GPU for rendering; to try another graphics backend, start Lightroom by Tonynehihi with \
          LIGHTCRAFT_GPU_BACKEND=dx12, vulkan or off (see docs/gpu-pipeline.md → Troubleshooting)."
     )
 }
@@ -197,7 +199,7 @@ fn gpu_lost_check_at(marker: Option<&std::path::Path>, in_memory: bool) -> Optio
         let _ = std::fs::remove_file(m);
     }
     Some(format!(
-        "LightCraft stopped last time after the graphics driver reset the GPU ({}) while photos rendered on it, so GPU rendering \
+        "Lightroom by Tonynehihi stopped last time after the graphics driver reset the GPU ({}) while photos rendered on it, so GPU rendering \
          is now off and photos render on the CPU. To try the GPU again, turn on Settings ▸ Performance ▸ Use the GPU for rendering; \
          an up-to-date graphics driver may help.",
         reason.trim()
@@ -362,7 +364,7 @@ struct PrefsWriter {
 
 impl PrefsWriter {
     fn save(&mut self, app: &LightcraftApp) -> Result<(), String> {
-        self.save_ui(&app.ui, app.library_problem.is_some())
+        self.save_ui(&app.ui, app.library_problem.as_ref().is_some_and(LibraryProblem::saves_nothing))
     }
 
     /// Write `ui` if it changed since the last write; `temporary` (the library couldn't be
@@ -425,7 +427,7 @@ impl PrefsWriter {
             Err(e) => {
                 if !self.failing {
                     log::warn!("{e}");
-                    app.notices.push(format!("{e}. LightCraft keeps trying."));
+                    app.notices.push(format!("{e}. Lightroom by Tonynehihi keeps trying."));
                 }
                 self.failing = true;
                 // don't retry every frame
@@ -703,6 +705,24 @@ fn services(cc: &eframe::CreationContext<'_>, log_file: Option<&std::path::Path>
                 .save_file()
                 .map(|p| p.to_string_lossy().to_string())
         })),
+        pick_print_templates: Some(Box::new(|| {
+            file_dialog()
+                .set_title(lightcraft_ui_egui::i18n::tr("Import Print Templates"))
+                .add_filter_nocase(lightcraft_ui_egui::i18n::tr("Print Templates"), &[lightcraft_engine::print::template::FILE_EXT])
+                .pick_files()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect()
+        })),
+        save_print_template: Some(Box::new(|name: &str| {
+            file_dialog()
+                .set_title(lightcraft_ui_egui::i18n::tr("Export Print Template"))
+                .add_filter_nocase(lightcraft_ui_egui::i18n::tr("Print Templates"), &[lightcraft_engine::print::template::FILE_EXT])
+                .set_file_name(name)
+                .save_file()
+                .map(|p| p.to_string_lossy().to_string())
+        })),
         // atomic (temp file + sync + rename): a failed write never leaves a truncated file
         write_shared: Some(std::sync::Arc::new(lightcraft_engine::export::write_file)),
         write: Some(Box::new(lightcraft_engine::export::write_file)),
@@ -717,9 +737,13 @@ fn services(cc: &eframe::CreationContext<'_>, log_file: Option<&std::path::Path>
 }
 
 /// The library session with the folders face models (`<config>/models`) and slideshow templates
-/// (`<config>/slideshow-templates`) are kept in.
-fn open_session(in_memory: bool, dir: Option<std::path::PathBuf>, seed_demo: bool) -> (Session, Option<LibraryProblem>) {
-    let (mut s, problem) = open_library_session(in_memory, dir, seed_demo);
+/// (`<config>/slideshow-templates`) are kept in. With [`Launch::Ask`] no library is opened yet:
+/// the window lists the recent ones.
+fn open_session(in_memory: bool, launch: &Launch, seed_demo: bool) -> (Session, Option<LibraryProblem>) {
+    let (mut s, problem) = match launch {
+        Launch::Ask => (Session::new().with_fs().with_default_denoise_models().with_system_clock(), None),
+        Launch::Open { dir, .. } => open_library_session(in_memory, dir.clone(), seed_demo),
+    };
     s.face_models_dir = lightcraft_engine::config::default_face_models_dir();
     s.slide_templates_dir = lightcraft_engine::config::config_dir().map(|d| d.join(lightcraft_engine::slide_template::DIR_NAME));
     // Control requests are answered on the UI thread: Add to Apple Photos must not wait there
@@ -768,7 +792,9 @@ lightcraft — photo library + raw developer
 USAGE: lightcraft [OPTIONS] [FILES/FOLDERS…]   (files and folders are imported)
 
 OPTIONS:
-  --library DIR    open (or create) this library (default: ~/Pictures/Lightroom by Tony Library; env LIGHTCRAFT_LIBRARY)
+  --library DIR    open (or create) this library (env LIGHTCRAFT_LIBRARY; default: the last library opened, or
+                   a list of the recent ones with Settings > General > At launch: Ask me or Alt/Option held,
+                   else ~/Pictures/Lightroom by Tony Library)
   --no-demo        don't seed a new library with the procedural demo photos
   --memory         throwaway in-memory session (alias --demo); nothing is saved
   --control PORT   serve the JSON-lines control channel on 127.0.0.1:PORT (env LIGHTCRAFT_CONTROL_PORT;
@@ -781,9 +807,9 @@ ENVIRONMENT:
   LIGHTCRAFT_GPU_BACKEND=dx12|vulkan|metal|auto|off   graphics backend (default: DX12 on Windows, Metal on macOS,
                    Vulkan on Linux; off = render on the CPU); else WGPU_BACKEND. LIGHTCRAFT_GPU=0: CPU rendering.
   LIGHTCRAFT_SAM3_DIR=DIR   the SAM 3 model for Object / Describe masks (default: <settings folder>/models/sam3;
-                   optional: LightCraft offers to download it when first needed)
+                   optional: Lightroom by Tonynehihi offers to download it when first needed)
   LIGHTCRAFT_SAM3_MIRRORS=URL,…   where to download the SAM 3 model from (base URLs, tried in order)
-  LIGHTCRAFT_LOG=info|debug   more log detail from LightCraft itself (default: info from LightCraft, warnings
+  LIGHTCRAFT_LOG=info|debug   more log detail from Lightroom by Tonynehihi itself (default: info from Lightroom by Tonynehihi, warnings
                    from other crates); else RUST_LOG=<env_logger directives>. Records go to stderr and to
                    <settings folder>/logs/lightcraft.log (previous runs: lightcraft.1.log, lightcraft.2.log)
 ";
@@ -899,15 +925,15 @@ fn main() -> eframe::Result {
     if let Some(ui) = &prefs {
         lightcraft_ui_egui::i18n::set_language(ui.language);
     }
-    // --library, else the library last opened from Settings, else the default location
-    let library_dir = library_dir.or_else(|| {
-        prefs
-            .as_ref()
-            .map(|u| u.settings.library_path.clone())
-            .filter(|p| !p.is_empty() && std::env::var_os("LIGHTCRAFT_LIBRARY").is_none())
-            .map(Into::into)
-    });
-    let library_dir = library_dir.or_else(lightcraft_engine::library::default_dir);
+    // --library, else LIGHTCRAFT_LIBRARY, else the list of recent libraries if Settings say Ask
+    // me, else the library last opened from Settings, else the default location
+    let launch = lightcraft_ui_egui::panels::library_problem::launch_plan(
+        in_memory,
+        library_dir,
+        std::env::var_os("LIGHTCRAFT_LIBRARY").filter(|p| !p.is_empty()).map(Into::into),
+        prefs.as_ref().map(|u| &u.settings),
+        lightcraft_engine::library::default_dir(),
+    );
     // GPU compute: off if the preference says so, or if the last launch died creating the device
     // (issue #136) — before anything can create it
     let gpu_crash = gpu_crash_check(in_memory).or_else(|| gpu_lost_check_at(gpu_lost_marker_path().as_deref(), in_memory));
@@ -954,13 +980,13 @@ fn main() -> eframe::Result {
     }
     let started = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         eframe::run_native(
-            "LightCraft",
+            "Lightroom by Tonynehihi",
             options,
             Box::new(move |cc| {
                 // the window's renderer is up (eframe calls this after creating it)
                 win_files_app.started(window_renderer);
                 came_up_app.store(true, std::sync::atomic::Ordering::Relaxed);
-                let (mut session, problem) = open_session(in_memory, library_dir, seed_demo && files.is_empty());
+                let (mut session, mut problem) = open_session(in_memory, &launch, seed_demo && files.is_empty());
                 // AI masks: the SAM 3 checkpoint (facebook/sam3) in <config>/models/sam3, or LIGHTCRAFT_SAM3_DIR
                 // (never required: without it, AI masks offer to download it; see docs/ai-masks.md)
                 // and the user's own download locations, one base URL per line (LIGHTCRAFT_SAM3_MIRRORS too)
@@ -971,6 +997,11 @@ fn main() -> eframe::Result {
                 if let Some(ui) = prefs {
                     app.ui = ui;
                 }
+                // the recent libraries to choose from (issue #1290), checked on a worker once shown
+                if launch == Launch::Ask {
+                    problem = Some(LibraryProblem::choose_later(&app.ui.settings));
+                }
+                app.alt_asks_for_library = matches!(launch, Launch::Open { alt_asks: true, .. });
                 lightcraft_ui_egui::i18n::set_language(app.ui.language);
                 app.integrated_titlebar = cfg!(target_os = "macos");
                 app.notices.extend(prefs_warning);
@@ -1070,7 +1101,7 @@ fn main() -> eframe::Result {
 fn stopped_text(error: &str, lost: Option<&str>) -> String {
     match lost {
         Some(reason) => format!(
-            "{error}. The graphics driver reset the GPU ({reason}). LightCraft renders on the CPU from its next start; \
+            "{error}. The graphics driver reset the GPU ({reason}). Lightroom by Tonynehihi renders on the CPU from its next start; \
              Settings ▸ Performance ▸ Use the GPU for rendering turns the GPU back on"
         ),
         None => error.to_string(),
@@ -1144,10 +1175,38 @@ mod tests {
     /// adds to Apple Photos on a worker (headless sessions wait instead).
     #[test]
     fn the_desktop_session_adds_to_apple_photos_in_the_background() {
-        let (s, problem) = open_session(true, None, false);
+        let (s, problem) = open_session(true, &Launch::Open { dir: None, alt_asks: false }, false);
         assert!(problem.is_none());
         assert!(s.apple_photos_background);
         assert!(!lightcraft_engine::Session::new().apple_photos_background);
+    }
+
+    /// Issue #1290: with Settings ▸ At launch ▸ Ask me nothing is opened (nor seeded with demo
+    /// photos) before the user chooses, and the settings are still saved while the list shows (a
+    /// removed entry is kept), unlike the failed-library window's temporary session.
+    #[test]
+    fn asking_at_launch_opens_nothing_and_still_saves_the_settings() {
+        let (s, problem) = open_session(false, &Launch::Ask, true);
+        assert!(problem.is_none() && s.library.is_none() && s.catalog.is_empty());
+        assert!(s.apple_photos_background, "the same desktop session as an opened one");
+
+        let d = dir("writer-ask");
+        let path = d.join("ui.json");
+        let mut app = LightcraftApp::new(s, Services::default());
+        app.ui.settings.recent_libraries = vec!["/gone/a".into(), "/gone/b".into()];
+        app.library_problem = Some(LibraryProblem::choose_later(&app.ui.settings));
+        let mut w = PrefsWriter { path: Some(path.clone()), ..Default::default() };
+        app.ui.settings.recent_libraries.remove(0);
+        w.save(&app).unwrap();
+        let saved: UiState = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(saved.settings.recent_libraries, ["/gone/b"]);
+        // the failed-library window still writes nothing
+        app.library_problem = Some(LibraryProblem::new("/gone/b", "not there"));
+        app.ui.settings.recent_libraries.clear();
+        w.save(&app).unwrap();
+        let saved: UiState = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(saved.settings.recent_libraries, ["/gone/b"]);
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     /// Issue #103: a damaged ui.json (which holds the library location) is kept aside and
@@ -1321,8 +1380,8 @@ mod tests {
         assert!(text.contains("reset the GPU (device lost (Unknown)") && text.contains("renders on the CPU from its next start"), "{text}");
         assert_eq!(stopped_text("its window stopped drawing", None), "its window stopped drawing");
         let (title, body) = lightcraft_ui_egui::i18n::stopped_message(&text, Some("/logs/lightcraft.log"));
-        assert_eq!(title, "LightCraft stopped");
-        assert!(body.starts_with("LightCraft stopped unexpectedly: its window stopped drawing") && body.ends_with("/logs/lightcraft.log"), "{body}");
+        assert_eq!(title, "Lightroom by Tonynehihi stopped");
+        assert!(body.starts_with("Lightroom by Tonynehihi stopped unexpectedly: its window stopped drawing") && body.ends_with("/logs/lightcraft.log"), "{body}");
         let _ = std::fs::remove_dir_all(&d);
     }
 

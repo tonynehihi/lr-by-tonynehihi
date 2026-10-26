@@ -141,6 +141,23 @@ pub fn detail_toggle(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, on
     });
 }
 
+/// The bar under the Denoise slider while a photo's picture is made: at most 240 px wide, and
+/// sweeping while the number of tiles is not known yet. The percentage is `progress::percent`, as the
+/// bar's accessible value is: 100 % only once done.
+pub(crate) fn detail_bar(ui: &mut egui::Ui, done: u64, total: u64) -> egui::Response {
+    let fraction = crate::progress::fraction_of(done, total);
+    let text = match fraction {
+        Some(f) => tr_format!("Making the denoised picture… {}%", crate::progress::percent(f)),
+        None => tr("Starting…").to_string(),
+    };
+    crate::progress::Progress::new(fraction).label(text).width(ui.available_width().min(240.0)).widget("denoise:progress").show(ui)
+}
+
+/// The bar in Settings, AI Denoise: 380 px wide however wide the tab is.
+pub(crate) fn settings_bar(ui: &mut egui::Ui, done: u64, total: u64, text: String) -> egui::Response {
+    crate::progress::Progress::new(crate::progress::fraction_of(done, total)).label(text).width(380.0).widget("denoise:settingsProgress").show(ui)
+}
+
 /// The line under the Denoise slider for the photo `id`, whose Amount is `amount`.
 pub fn detail_status(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, amount: f64) {
     let t = Tokens::get(ui.ctx());
@@ -168,7 +185,12 @@ pub fn detail_status(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, am
                 let now = ui.ctx().input(|i| i.time);
                 app.caches.denoise.next_pump = app.caches.denoise.next_pump.min(now + 0.05);
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(60));
-                egui::Frame::NONE.inner_margin(pad).show(ui, |ui| note(ui, "Waiting to start…", t.text_dim));
+                egui::Frame::NONE.inner_margin(pad).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        crate::progress::spinner(ui, 12.0);
+                        note(ui, "Waiting to start…", t.text_dim);
+                    })
+                });
             } else if amount > 0.0 {
                 egui::Frame::NONE.inner_margin(pad).show(ui, |ui| {
                     note(ui, "Its denoised picture is not made yet, and pictures are not made on their own (Settings, AI Denoise).", t.text_dim);
@@ -193,14 +215,7 @@ pub fn detail_status(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, am
         }
         PhotoState::Running { done, total } => {
             egui::Frame::NONE.inner_margin(pad).show(ui, |ui| {
-                let frac = if total > 0 { (done as f32 / total as f32).clamp(0.0, 1.0) } else { 0.0 };
-                let text = if total > 0 {
-                    tr_format!("Making the denoised picture… {}%", (frac * 100.0).round() as u32)
-                } else {
-                    tr("Starting…").to_string()
-                };
-                let bar = ui.add(egui::ProgressBar::new(frac).desired_width(ui.available_width().min(240.0)).text(RichText::new(text).size(11.0)));
-                register(ui.ctx(), "denoise:progress", bar.rect);
+                detail_bar(ui, done as u64, total as u64);
             });
         }
         PhotoState::Failed { why, unsupported } => {
@@ -245,8 +260,12 @@ pub fn settings_tab(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens) {
         .map(|v| v["downloads"].as_array().cloned().unwrap_or_default())
         .unwrap_or_default();
     heading(ui, t, "Models");
-    let r = ui.add_enabled(runtime && app.services.pick_denoise_model.is_some(), egui::Button::new(tr("Install from file…")));
-    register(ui.ctx(), "denoise:installFile", r.rect);
+    let installing = downloads.iter().any(|d| d["id"] == "local-install" && d["state"].as_str() == Some("installing"));
+    let r = crate::button::Button::new("Install from file…")
+        .enabled(runtime && app.services.pick_denoise_model.is_some())
+        .busy(installing)
+        .widget("denoise:installFile")
+        .show(ui);
     if r.clicked()
         && let Some(path) = app.services.pick_denoise_model.as_mut().and_then(|f| f().into_iter().next())
     {
@@ -321,7 +340,6 @@ fn work_section(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, list: &V
     let (running, queued) = (app.caches.denoise.running, app.caches.denoise.queued);
     match running {
         Some((done, total)) => {
-            let frac = if total > 0 { (done as f32 / total as f32).clamp(0.0, 1.0) } else { 0.0 };
             let name = status["running"]["photo"]
                 .as_u64()
                 .and_then(|p| app.session.catalog.photo(PhotoId(p)).map(|p| p.file_name.clone()))
@@ -333,8 +351,7 @@ fn work_section(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, list: &V
                 done = done,
                 total = total
             );
-            let bar = ui.add(egui::ProgressBar::new(frac).desired_width(380.0).text(RichText::new(text).size(11.5)));
-            register(ui.ctx(), "denoise:settingsProgress", bar.rect);
+            settings_bar(ui, done, total, text);
         }
         None if queued > 0 => hint(ui, t, &count(queued, "photo waiting", "photos waiting")),
         None => {
@@ -438,17 +455,22 @@ fn model_row(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, m: &Value, 
                 match (dl_state, dl) {
                     (Some("running"), Some(d)) => {
                         let (got, total) = (d["bytes"].as_u64().unwrap_or(0), d["total"].as_u64().unwrap_or(0));
-                        let frac = if total > 0 { (got as f32 / total as f32).clamp(0.0, 1.0) } else { 0.0 };
                         let text = if total > 0 && got >= total {
                             tr("Checking…").to_string()
                         } else {
                             tr_format!("{} of {} from {host}", mb(Some(got)), mb(Some(total)), host = host)
                         };
-                        let bar = ui.add(egui::ProgressBar::new(frac).desired_width(260.0).text(RichText::new(text).font(t.font(11.5))));
-                        register(ui.ctx(), format!("denoise:progress:{id}"), bar.rect);
+                        crate::progress::Progress::new(crate::progress::fraction_of(got, total))
+                            .label(text)
+                            .width(crate::progress::ROW_WIDTH.min(ui.available_width()))
+                            .widget(format!("denoise:progress:{id}"))
+                            .show(ui);
                     }
                     (Some("done" | "installing"), _) => {
-                        ui.label(RichText::new(tr("Downloaded and checked. Installing…")).font(t.font(11.5)).color(t.text_dim));
+                        ui.horizontal(|ui| {
+                            crate::progress::spinner(ui, 12.0);
+                            ui.label(RichText::new(tr("Downloaded and checked. Installing…")).font(t.font(11.5)).color(t.text_dim));
+                        });
                     }
                     (Some("failed"), Some(d)) => {
                         let why = sentence(d["error"].as_str().unwrap_or("The download failed"));
@@ -637,7 +659,7 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
         ui.label(RichText::new(tr("This file cannot be used yet")).font(t.semibold(13.5)).color(t.caution));
         ui.add(
             egui::Label::new(
-                RichText::new(sentence(tr(info["reason"].as_str().unwrap_or("It is not a denoise model LightCraft understands"))))
+                RichText::new(sentence(tr(info["reason"].as_str().unwrap_or("It is not a denoise model Lightroom by Tonynehihi understands"))))
                     .color(t.text_label),
             )
             .wrap(),
@@ -660,7 +682,7 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
         ui.add(
             egui::Label::new(
                 RichText::new(tr_format!(
-                    "Downloads from {host}. Once it has arrived and checked out, LightCraft installs it, {after}.",
+                    "Downloads from {host}. Once it has arrived and checked out, Lightroom by Tonynehihi installs it, {after}.",
                     host = host,
                     after = tr(after)
                 ))
@@ -681,7 +703,7 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
     }
     if kind == "draft" {
         ui.add_space(2.0);
-        ui.label(RichText::new(tr("LightCraft does not know this model, so it assumed:")).color(t.text_label));
+        ui.label(RichText::new(tr("Lightroom by Tonynehihi does not know this model, so it assumed:")).color(t.text_label));
         for a in info["assumptions"].as_array().into_iter().flatten().filter_map(Value::as_str) {
             ui.add(egui::Label::new(RichText::new(tr_format!("•  {assumption}", assumption = tr(a))).font(t.font(12.0)).color(t.text_dim)).wrap());
         }
@@ -696,9 +718,9 @@ pub fn model_dialog(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens, info
     ui.add_space(4.0);
     check(ui, "denoiseModel.accept", accepted, "I have read these terms and accept them for my own use");
     let closing = if download {
-        "Nothing is fetched until you accept. The model is kept on this computer only; LightCraft never uploads or shares it."
+        "Nothing is fetched until you accept. The model is kept on this computer only; Lightroom by Tonynehihi never uploads or shares it."
     } else {
-        "The model is kept on this computer only. LightCraft never uploads or shares it."
+        "The model is kept on this computer only. Lightroom by Tonynehihi never uploads or shares it."
     };
     ui.label(RichText::new(tr(closing)).font(t.font(11.5)).color(t.text_dim));
 }

@@ -85,7 +85,7 @@ pub struct Outcome {
 
 /// The notice of the job after which the model runs on the CPU.
 pub const GPU_FAILED: &str =
-    "The GPU couldn't run the AI mask model, so it runs on the CPU until LightCraft restarts (slower). Details are in the log.";
+    "The GPU couldn't run the AI mask model, so it runs on the CPU until Lightroom by Tonynehihi restarts (slower). Details are in the log.";
 
 /// Where the model is loaded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

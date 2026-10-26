@@ -2,6 +2,16 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.5.0
+
+- **SYNCED WITH UPSTREAM LIGHTCRAFT v0.14.0**: the whole app moves up to upstream 0.14.0 — **INFO PANEL METADATA**, **VIEW OPTIONS** (choose what the info overlay shows), **PRINT TEMPLATES**, and a **MANUAL SLIDESHOW** that waits for the arrow keys, plus upstream's fixes and polish since 0.13.
+- **NO MORE "LIGHTCRAFT" ANYWHERE YOU LOOK**: the window title, notices, dialogs, model panels, lock and library errors, template errors, CLI help and exported file metadata now all say **Lightroom by Tonynehihi** — the 1.4.0 rebrand had left the old name in these corners.
+- **HELP › DEBUG › FRAME RATE**: the new upstream frame-rate toggle is now in the Help menu (the merge had left it unregistered).
+- **FILMSTRIP SELECTION TICKS ARE NAMED FOR SCREEN READERS**: the per-photo tick in the filmstrip now announces its photo and selection state, fixing the accessibility audit.
+- Small fixes: the Charcoal theme's thumbnail placeholder now stands apart properly, and a duplicate French translation key is gone.
+
+— **tonynehihi**
+
 ## 1.4.0
 
 - **SYNCED WITH UPSTREAM LIGHTCRAFT v0.13.0**: the whole app moves up to upstream 0.13.0 — **VIETNAMESE INTERFACE** (the app now speaks Vietnamese), **GUIDED UPRIGHT** for straightening tilted shots with guide lines, **GPU DENOISE ON MORE HARDWARE** (DirectX 12, including NVIDIA Pascal cards), **MINOLTA MRW** raw decoding, and a **CLI SECURITY FIX**, plus upstream's fixes and polish since 0.11.
