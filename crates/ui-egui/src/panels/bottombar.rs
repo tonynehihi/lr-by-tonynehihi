@@ -81,21 +81,31 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 /// Five 19-point stars, three 22-point flags, seven 3-point gaps, a 6-point group gap
 /// and 10-point padding at both ends.
 const PILL_W: f32 = 208.0;
+/// Copy and Paste are two separate buttons (the 1.1.4 layout, restored in 1.5.1:
+/// the single button that flipped to Paste once something was copied made it impossible
+/// to copy a different photo's settings without pasting first), then the copy-options
+/// gear and an All/None selection toggle. 112 is the 1.1.4 width and the floor: a
+/// translated caption wider than that widens its button (German "Paste Settings"
+/// measures 140), so the caption never paints outside its button.
+const COPY_W: f32 = 112.0;
+const PASTE_W: f32 = 112.0;
+const ALL_W: f32 = 46.0;
 
 /// The rating/flag pill and copy/paste settings, between `from` and `to` (the side groups): the
 /// copy buttons go first when there is no room (they are in the Edit menu too), then the pill.
 fn centre(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, from: f32, to: f32) {
     let t = Tokens::get(ui.ctx());
-    let has_clip = app.session.clipboard.is_some();
-    let label = crate::i18n::tr(if has_clip { "Paste Edit Settings" } else { "Copy Edit Settings" });
-    let copy_width = (ui.painter().layout_no_wrap(label.to_string(), t.font(13.0), t.text_label).size().x + 24.0).max(136.0);
-    let centre_width = PILL_W + 10.0 + copy_width + 4.0 + 30.0;
     let room = to - from;
     if room < PILL_W {
         return;
     }
-    let with_copy = room >= centre_width;
-    let w = if with_copy { centre_width } else { PILL_W };
+    // size each button to its translated caption plus padding, never narrower than 112
+    let measure = |s: &str| ui.painter().layout_no_wrap(s.to_string(), t.font(13.0), t.text_label).size().x;
+    let copy_w = COPY_W.max(measure(crate::i18n::tr("Copy Settings")) + 16.0);
+    let paste_w = PASTE_W.max(measure(crate::i18n::tr("Paste Settings")) + 16.0);
+    let centre_w = PILL_W + 10.0 + copy_w + 6.0 + paste_w + 4.0 + 30.0 + 6.0 + ALL_W;
+    let with_copy = room >= centre_w;
+    let w = if with_copy { centre_w } else { PILL_W };
     // where it sits with room to spare (slightly left of centre), kept between the side groups
     let left = (full.center().x - 60.0 - PILL_W / 2.0).clamp(from, to - w);
     let active = app.session.active().and_then(|id| app.session.catalog.photo(id).cloned());
@@ -141,18 +151,20 @@ fn centre(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, from: f32, to:
             let _ = app.run("photo.flag", params);
         }
     }
-    // copy / paste settings
+    // copy / paste settings: two separate buttons side by side, so new settings can be
+    // copied at any time (the old single button flipped to Paste once something was copied)
     if !with_copy {
         return;
     }
+    let has_clip = app.session.clipboard.is_some();
     // when the selected photos' settings differ there is no single settings set to copy:
-    // the button greys out and stops responding instead of failing on click (the engine
+    // the Copy button greys out and stops responding instead of failing on click (the engine
     // still refuses the command itself, for the other callers)
     let copy_blocked = !has_clip && app.session.copy_is_ambiguous(&json!({}));
     let copy_enabled = active.is_some() && !copy_blocked;
-    let copy_r = Rect::from_min_size(pos2(pill.right() + 10.0, pill.top()), vec2(copy_width, 30.0));
+    let copy_r = Rect::from_min_size(pos2(pill.right() + 10.0, pill.top()), vec2(copy_w, 30.0));
     let cresp = ui.interact(copy_r, egui::Id::new("copy-settings"), if copy_enabled { Sense::click() } else { Sense::hover() });
-    crate::widgets::announce(&cresp, label.to_string());
+    crate::widgets::announce(&cresp, crate::i18n::tr("Copy Settings"));
     register(ui.ctx(), "button:copySettings", copy_r);
     let cresp = if copy_blocked {
         cresp.on_hover_text(crate::i18n::tr("The selected photos have different edit settings — select a single photo to copy its settings"))
@@ -160,13 +172,28 @@ fn centre(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, from: f32, to:
         cresp
     };
     ui.painter().rect_filled(copy_r, 15.0, if cresp.hovered() && copy_enabled { t.hover } else { t.canvas });
-    ui.painter().text(copy_r.center(), Align2::CENTER_CENTER, label, t.font(13.0), if copy_enabled { t.text_label } else { t.text_disabled });
+    ui.painter().text(copy_r.center(), Align2::CENTER_CENTER, crate::i18n::tr("Copy Settings"), t.font(13.0), if copy_enabled { t.text_label } else { t.text_disabled });
     if cresp.clicked() && copy_enabled {
-        let _ = if has_clip { app.run("develop.paste", json!({})) } else { app.run("develop.copy", json!({})) };
-        let msg = if has_clip { "Settings pasted" } else { "Edit settings copied" };
-        app.toast(ui.ctx(), crate::i18n::tr(msg));
+        let _ = app.run("develop.copy", json!({}));
+        app.toast(ui.ctx(), crate::i18n::tr("Edit settings copied"));
     }
-    let gear_r = Rect::from_min_size(pos2(copy_r.right() + 4.0, pill.top()), vec2(30.0, 30.0));
+    let paste_r = Rect::from_min_size(pos2(copy_r.right() + 6.0, pill.top()), vec2(paste_w, 30.0));
+    let presp = ui.interact(paste_r, egui::Id::new("paste-settings"), if has_clip { Sense::click() } else { Sense::hover() });
+    crate::widgets::announce(&presp, crate::i18n::tr("Paste Settings"));
+    register(ui.ctx(), "button:pasteSettings", paste_r);
+    ui.painter().rect_filled(paste_r, 15.0, if presp.hovered() && has_clip { t.hover } else { t.canvas });
+    ui.painter().text(paste_r.center(), Align2::CENTER_CENTER, crate::i18n::tr("Paste Settings"), t.font(13.0), if has_clip { t.text_label } else { t.text_disabled });
+    if presp.clicked() && has_clip {
+        // paste applies to every selected photo (the engine's targets), not just the active one
+        match app.run("develop.paste", json!({})) {
+            Ok(r) => {
+                let n = r["changed"].as_u64().unwrap_or(0);
+                app.toast(ui.ctx(), format!("Settings pasted to {n} photo{}", if n == 1 { "" } else { "s" }));
+            }
+            Err(e) => app.toast(ui.ctx(), e),
+        }
+    }
+    let gear_r = Rect::from_min_size(pos2(paste_r.right() + 4.0, pill.top()), vec2(30.0, 30.0));
     let gresp = ui.interact(gear_r, egui::Id::new("copy-gear"), Sense::click());
     crate::widgets::announce(&gresp, crate::i18n::tr("Copy Settings…"));
     register(ui.ctx(), "icon:copyGear", gear_r);
@@ -174,6 +201,26 @@ fn centre(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, from: f32, to:
     paint(ui.painter(), gear_r.shrink(7.0), Icon::Gear, t.icon);
     if gresp.clicked() {
         let _ = app.run("dialog.copySettings", json!({}));
+    }
+    // select all / none toggle for the photos in view
+    let vis_n = app.session.visible_cloned().len();
+    let all_sel = vis_n > 0 && app.session.selection.ids.len() >= vis_n;
+    let all_r = Rect::from_min_size(pos2(gear_r.right() + 6.0, pill.top()), vec2(ALL_W, 30.0));
+    let aresp = ui.interact(all_r, egui::Id::new("select-all"), Sense::click());
+    // a hand-drawn button with no announce is an unnamed node in the AccessKit tree
+    // and fails the accessibility audit: name it after the action it will take
+    crate::widgets::announce(&aresp, crate::i18n::tr(if all_sel { "Select none" } else { "Select all" }));
+    register(ui.ctx(), "button:selectAll", all_r);
+    ui.painter().rect_filled(all_r, 15.0, if aresp.hovered() && vis_n > 0 { t.hover } else { t.canvas });
+    ui.painter().text(
+        all_r.center(),
+        Align2::CENTER_CENTER,
+        crate::i18n::tr(if all_sel { "None" } else { "All" }),
+        t.font(12.5),
+        if vis_n > 0 { t.text_label } else { t.text_disabled },
+    );
+    if aresp.clicked() && vis_n > 0 {
+        let _ = app.run(if all_sel { "library.selectNone" } else { "library.selectAll" }, json!({}));
     }
 }
 

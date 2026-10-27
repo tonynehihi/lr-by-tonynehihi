@@ -1113,7 +1113,7 @@ impl ExportOptions {
         fn enm<T: serde::de::DeserializeOwned>(p: &Value, k: &str) -> Option<T> {
             p.get(k).cloned().and_then(|v| serde_json::from_value(v).ok())
         }
-        Self {
+        let mut o = Self {
             format: s("format").and_then(ExportFormat::parse).unwrap_or(d.format),
             quality: u("quality").map_or(d.quality, |q| q.clamp(1, 100) as u8),
             resize: Self::resize_from_json(p),
@@ -1151,7 +1151,15 @@ impl ExportOptions {
             photos_album: s("photosAlbum").map_or(d.photos_album, |a| a.trim().to_string()),
             hdr_transfer: s("hdrTransfer").and_then(HdrCurve::parse).unwrap_or(d.hdr_transfer),
             hdr_boost: p.get("hdrBoost").and_then(serde_json::Value::as_f64).map_or(d.hdr_boost, |v| (v as f32).clamp(0.0, 4.0)),
+        };
+        // The fork's "JPEG Ultra HDR" format is retired from the dialog in 1.5.1: it wrote
+        // the same gain-map JPEG the upstream "HDR output" checkbox writes, so old presets
+        // and last-export records load as plain JPEG with HDR output on.
+        if o.format == ExportFormat::UltraHdr {
+            o.format = ExportFormat::Jpeg;
+            o.hdr = true;
         }
+        o
     }
 
     fn resize_from_json(p: &serde_json::Value) -> Option<Resize> {

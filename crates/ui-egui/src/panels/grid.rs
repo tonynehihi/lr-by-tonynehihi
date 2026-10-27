@@ -1408,7 +1408,10 @@ pub fn context_menu(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     if ui.add_enabled(crate::menus::show_in_folders_enabled(app, Some(id)), egui::Button::new(crate::i18n::tr("Show in Folders"))).clicked() {
         let _ = app.run("app.showInFolders", json!({"id": id.0}));
     }
-    if ui.button(crate::i18n::tr("Export…")).clicked() {
+    // with several photos selected this exports all of them, not just the one right-clicked:
+    // the label says so instead of leaving it to be discovered after the click
+    let export_label = if app.session.selected().len() > 1 { "Export All…" } else { "Export…" };
+    if ui.button(crate::i18n::tr(export_label)).clicked() {
         let _ = app.run("dialog.export", json!({}));
     }
     crate::widgets::menu_button(ui, crate::i18n::tr("Export with Preset"), |ui| {

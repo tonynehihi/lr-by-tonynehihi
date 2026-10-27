@@ -2,6 +2,17 @@
 
 All notable changes to this personal fork. The same notes are published on GitHub Releases and shown in the app when an update is available.
 
+## 1.5.1
+
+- **COPY SETTINGS AND PASTE SETTINGS ARE TWO SEPARATE BUTTONS AGAIN**: the bottom bar had fallen back to a single button that flipped to Paste once something was copied, so a different photo's settings couldn't be copied without pasting first — the 1.1.4 layout is restored (Copy, Paste, the copy-options gear, and an All/None selection toggle), and Copy still greys out when the selected photos have different settings. This layout is now a fork rule, kept across future upstream syncs.
+- **ONE HDR SWITCH IN EXPORT, NOT THREE**: the Export dialog offered "JPEG Ultra HDR" as a format, an "HDR photo" checkbox, and an "HDR output" checkbox — the first two wrote the same gain-map JPEG the third one writes. The dialog now has only **HDR OUTPUT** (JPEG gain map, 10-bit AVIF, 16-bit Rec. 2020 PQ PNG/JPEG XL, 32-bit float TIFF); old Ultra HDR presets and last-export records load as JPEG with HDR output on, and the HDR boost slider goes away with the retired format. HDR editing in the Light panel and Visualize HDR are untouched — those are the editing side, not a duplicate.
+- **EXPORT BUTTON SAYS WHAT IT EXPORTS**: with several photos selected, the photo menu's Export button and the Export dialog's confirm button now read **EXPORT ALL** — before, both just said Export while quietly exporting the whole selection; a single photo still says Export.
+- **EXPORT DIALOG, SIMPLER AT FIRST GLANCE**: Sharpen, Metadata, Watermark and format compression now hide behind a **MORE OPTIONS** checkbox that starts closed — the dialog opens shorter, everything else stays where it was, and nothing is removed; open it once and it stays open for the session.
+- **COPY/PASTE BUTTONS FIT THEIR LANGUAGE**: the restored buttons were a fixed 112 points wide, and longer translations painted past the edge — German "Paste Settings" overflowed its button. Each button now sizes to its own caption, so every language fits; English looks exactly as before.
+- **ALL/NONE TOGGLE ANNOUNCED FOR SCREEN READERS**: the restored All/None toggle had no accessible name, so screen readers met an unnamed button — it now announces **SELECT ALL** or **SELECT NONE** for the action it will take.
+
+— **tonynehihi**
+
 ## 1.5.0
 
 - **SYNCED WITH UPSTREAM LIGHTCRAFT v0.14.0**: the whole app moves up to upstream 0.14.0 — **INFO PANEL METADATA**, **VIEW OPTIONS** (choose what the info overlay shows), **PRINT TEMPLATES**, and a **MANUAL SLIDESHOW** that waits for the arrow keys, plus upstream's fixes and polish since 0.13.

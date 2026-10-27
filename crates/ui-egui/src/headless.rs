@@ -2336,6 +2336,10 @@ mod tests {
         if let Some(crate::state::Dialog::Export { opts, .. }) = &mut h.app.ui.dialog {
             opts.watermark = Some(lightcraft_engine::export::Watermark { text: "© LightCraft".into(), ..Default::default() });
         }
+        // the watermark rows live behind "More options", closed by default since 1.5.1:
+        // the test sets the watermark straight into the options, so it must open the
+        // section the same way a click would, or the preview never renders
+        h.view.ctx.data_mut(|d| d.insert_temp(egui::Id::new("export-more"), true));
         let t0 = Instant::now();
         while preview(&mut h).is_none() && t0.elapsed() < Duration::from_secs(30) {
             h.step();

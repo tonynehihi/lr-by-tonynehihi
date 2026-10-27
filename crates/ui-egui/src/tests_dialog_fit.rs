@@ -97,12 +97,15 @@ fn export_dialog_is_unchanged_in_a_tall_window() {
     // since #956; 615 wide since the format row gained JPEG XL, #780. On macOS the dialog has one
     // more row, "Add to Apple Photos" (#236), so it is 30 taller there. 8 more since its footer's
     // buttons are the button component's medium size, 30 points, as the welcome's and every dialog's.
-    // This fork: the format row also carries JPEG Ultra HDR, which makes the dialog 724 wide, and
-    // JPEG shows an "HDR photo" row, 30 taller on every platform — both measured on Linux; the
-    // macOS figure adds the same 30 to upstream's.)
-    let height = if cfg!(target_os = "macos") { 946.0 } else { 916.0 };
+    // 1.5.1 retires the fork's "JPEG Ultra HDR" format entry and "HDR photo" row, and hides
+    // Sharpen / Metadata / Watermark / compression behind a "More options" checkbox that
+    // starts closed: the dialog goes back to the 615 width and loses 98 of height on macOS
+    // (818, measured on the Mac mini 2026-10-27, not the predicted 826 — the collapsed span
+    // also takes its 4.0 spacing and the row gaps with it). Non-mac is 30 less, the Apple
+    // Photos row macOS alone has.)
+    let height = if cfg!(target_os = "macos") { 818.0 } else { 788.0 };
     assert!((dialog.height() - height).abs() <= 1.0, "{dialog:?}");
-    assert!((dialog.width() - 724.0).abs() <= 1.0, "{dialog:?}");
+    assert!((dialog.width() - 615.0).abs() <= 1.0, "{dialog:?}");
 }
 
 // Scenario: other long dialogs fit a short window too, with their buttons on screen

@@ -1246,9 +1246,12 @@ mod tests {
                     }
                 } else {
                     let button = rect("button:copySettings");
-                    let (_, text) = bounds.iter().find(|entry| entry.0 == language.tr("Copy Edit Settings")).unwrap();
+                    let (_, text) = bounds.iter().find(|entry| entry.0 == language.tr("Copy Settings")).unwrap();
                     assert!(button.contains_rect(*text), "{language:?} copy caption overflows its button: {text:?} vs {button:?}");
                     assert!(!button.intersects(rect("icon:copyGear")));
+                    let paste_button = rect("button:pasteSettings");
+                    let (_, paste_text) = bounds.iter().find(|entry| entry.0 == language.tr("Paste Settings")).unwrap();
+                    assert!(paste_button.contains_rect(*paste_text), "{language:?} paste caption overflows its button: {paste_text:?} vs {paste_button:?}");
                 }
             }
         }
